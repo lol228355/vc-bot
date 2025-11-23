@@ -8,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ==================== НАСТРОЙКИ (ВЦ) ====================
-TOKEN = "ВСТАВЬ_СЮДА_ТОКЕН_ОТ_ВЦ_БОТА"  # <--- ТУТ ТОКЕН ДЛЯ ВЦ
+TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"  # <--- ТУТ ТОКЕН ДЛЯ ВЦ
 ADMIN_IDS = [8448843727, 8227071592]
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 QUEUE_TIMEOUT_MIN = 15  # 15 минут
