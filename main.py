@@ -14,8 +14,8 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 logging.basicConfig(level=logging.INFO)
 
 # ==================== НАСТРОЙКИ ====================
-TOKEN = "8389575987:AAFu7A8NSmK3D6AynohVIw5QDPiYqRSNhbY"
-ADMIN_IDS = [8227071592, 8394356460]
+TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
+ADMIN_IDS = [8448843727, 8227071592]
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 
 bot = Bot(token=TOKEN)
