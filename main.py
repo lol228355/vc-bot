@@ -26,6 +26,9 @@ WARNING_TIME_MIN = 5
 HOLD_TIME_MIN = 15          # Таймер БезХолд (15 мин)
 CODE_WAIT_MIN = 3
 
+# ТЕКСТ ТАРИФА
+TARIFF_TEXT = "БХ РФ (RU) - 15 мин/$5.0"
+
 IS_WORK_ACTIVE = True
 WARNED_USERS = set()
 
@@ -41,6 +44,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER UNIQUE,
+                username TEXT,
                 numbers TEXT,
                 ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -56,6 +60,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS active_work (
                 user_id INTEGER PRIMARY KEY,
                 admin_id INTEGER,
+                username TEXT,
                 numbers TEXT,
                 status TEXT DEFAULT 'process',
                 hold_until TIMESTAMP,
@@ -69,11 +74,19 @@ def init_db():
                 message_id INTEGER
             )
         """)
+        
+        # Обновление старой БД (добавление колонок если их нет)
         try: conn.execute("ALTER TABLE users ADD COLUMN mute_until TIMESTAMP")
         except: pass
         try: conn.execute("ALTER TABLE active_work ADD COLUMN status TEXT DEFAULT 'process'")
         except: pass
         try: conn.execute("ALTER TABLE active_work ADD COLUMN hold_until TIMESTAMP")
+        except: pass
+        
+        # ДОБАВЛЯЕМ КОЛОНКУ USERNAME
+        try: conn.execute("ALTER TABLE queue ADD COLUMN username TEXT")
+        except: pass
+        try: conn.execute("ALTER TABLE active_work ADD COLUMN username TEXT")
         except: pass
 
 init_db()
@@ -130,9 +143,11 @@ def check_mute(uid):
                 return True, f"{h}ч {m}мин"
     return False, ""
 
-def add_to_queue(uid, numbers):
+def add_to_queue(uid, username, numbers):
+    # numbers - это уже список
+    formatted_numbers = "\n".join(numbers)
     with get_conn() as conn:
-        conn.execute("REPLACE INTO queue (user_id, numbers, ts) VALUES (?, ?, CURRENT_TIMESTAMP)", (uid, "\n".join(numbers)))
+        conn.execute("REPLACE INTO queue (user_id, username, numbers, ts) VALUES (?, ?, ?, CURRENT_TIMESTAMP)", (uid, username, formatted_numbers))
 
 def save_admin_message(user_id, admin_id, message_id):
     with get_conn() as conn:
@@ -156,10 +171,12 @@ def get_queue_info(uid):
     with get_conn() as conn: return conn.execute("SELECT numbers, id FROM queue WHERE user_id = ?", (uid,)).fetchone()
 
 def get_all_queue():
-    with get_conn() as conn: return conn.execute("SELECT user_id, numbers FROM queue ORDER BY id ASC").fetchall()
+    # Теперь берем и username
+    with get_conn() as conn: return conn.execute("SELECT user_id, numbers, username FROM queue ORDER BY id ASC").fetchall()
 
 def get_active_work_list():
-    with get_conn() as conn: return conn.execute("SELECT user_id, admin_id, numbers, status, hold_until FROM active_work").fetchall()
+    # Теперь берем и username
+    with get_conn() as conn: return conn.execute("SELECT user_id, admin_id, numbers, status, hold_until, username FROM active_work").fetchall()
 
 def get_position(row_id):
     with get_conn() as conn:
@@ -207,9 +224,9 @@ user_menu = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="💰 Условия и выплаты")]
 ], resize_keyboard=True)
 
-# МЕНЮ ВЫБОРА ТАРИФА (ТОЛЬКО РФ)
+# МЕНЮ ВЫБОРА ТАРИФА (ОБНОВЛЕНО)
 tariffs_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="БХ РФ (RU) - 20 мин/$4.0", callback_data="tariff_ru")]
+    [InlineKeyboardButton(text=TARIFF_TEXT, callback_data="tariff_ru")]
 ])
 
 admin_panel_kb = ReplyKeyboardMarkup(keyboard=[
@@ -258,8 +275,8 @@ async def tariff_chosen(c: types.CallbackQuery, state: FSMContext):
 
     await state.set_state(UserStates.waiting_nums)
     await c.message.edit_text(
-        "📝 <b>Введите ваши номера (РФ):</b>\n\n"
-        "Каждый номер с новой строки.\n"
+        "📝 <b>Введите ваши номера:</b>\n\n"
+        "Можно списком, можно в строчку.\n"
         "Пример:\n<code>+79001234567\n+79007654321</code>",
         parse_mode="HTML"
     )
@@ -268,18 +285,24 @@ async def tariff_chosen(c: types.CallbackQuery, state: FSMContext):
 async def receive_numbers(m: types.Message, state: FSMContext):
     text = m.text
     if not text: return
-    lines = text.split('\n')
-    valid_numbers = [line.strip() for line in lines if len(line.strip()) > 7]
+    
+    # ИСПРАВЛЕНИЕ: Используем Regex для поиска номеров
+    # Ищет последовательности цифр от 10 до 15 знаков, возможно с плюсом
+    found_numbers = re.findall(r'\+?\d{10,15}', text)
+    valid_numbers = list(set(found_numbers)) # Удаляем дубликаты
     
     if not valid_numbers:
-        return await m.answer("❌ Не найдено корректных номеров.", reply_markup=user_menu)
+        return await m.answer("❌ Не найдено корректных номеров. Попробуйте еще раз.", reply_markup=user_menu)
 
-    add_to_queue(m.from_user.id, valid_numbers)
+    # Сохраняем username пользователя (или "Без ника")
+    username = f"@{m.from_user.username}" if m.from_user.username else "Без ника"
+
+    add_to_queue(m.from_user.id, username, valid_numbers)
     await state.clear()
     
     await m.answer(
         f"✅ <b>Заявка принята!</b>\n"
-        f"Тариф: РФ (RU)\n"
+        f"Тариф: {TARIFF_TEXT}\n"
         f"Количество: {len(valid_numbers)}\n"
         f"Ожидайте, администратор скоро возьмет их в работу.",
         parse_mode="HTML",
@@ -288,7 +311,13 @@ async def receive_numbers(m: types.Message, state: FSMContext):
     
     for admin_id in ADMIN_IDS:
         try: 
-            await bot.send_message(admin_id, f"🆕 <b>Новая заявка (РФ)!</b>\nЮзер: {m.from_user.id}\nКол-во: {len(valid_numbers)}", parse_mode="HTML")
+            await bot.send_message(
+                admin_id, 
+                f"🆕 <b>Новая заявка!</b>\n"
+                f"Юзер: {username} (ID: <code>{m.from_user.id}</code>)\n"
+                f"Кол-во: {len(valid_numbers)}", 
+                parse_mode="HTML"
+            )
         except: pass
 
 # --- ОСТАЛЬНЫЕ ХЭНДЛЕРЫ ЮЗЕРА ---
@@ -335,14 +364,17 @@ async def show_queue(m: types.Message):
     text = "📋 <b>Очередь:</b>\n\n"
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     
-    for uid, nums in rows:
+    # Теперь распаковываем 3 значения (uid, nums, username)
+    for uid, nums, username in rows:
         count = len(nums.split('\n'))
-        text += f"👤 ID: <code>{uid}</code> | {count} шт.\n"
+        # Отображаем Username в списке
+        display_name = username if username else "Без ника"
+        text += f"👤 {display_name} | ID: <code>{uid}</code> | {count} шт.\n"
         kb.inline_keyboard.append([InlineKeyboardButton(text=f"Взять {uid} ({count} шт)", callback_data=f"take_{uid}")])
         
     await m.answer(text, parse_mode="HTML", reply_markup=kb)
 
-# --- НОВАЯ ФУНКЦИЯ ПРОСМОТРА ХОЛДОВ С КНОПКОЙ СЛЕТА ---
+# --- ФУНКЦИЯ ПРОСМОТРА ХОЛДОВ С КНОПКОЙ СЛЕТА ---
 @dp.message(F.text == "📱 Номера (БезХолд)", AdminFilter())
 async def show_hold(m: types.Message):
     rows = get_active_work_list()
@@ -351,7 +383,9 @@ async def show_hold(m: types.Message):
     text = "📱 <b>В работе / Холд:</b>\n\n"
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     
-    for uid, aid, nums, status, hold_until in rows:
+    for uid, aid, nums, status, hold_until, username in rows:
+        display_name = username if username else str(uid)
+        
         if status == 'hold' and hold_until:
             try:
                 if isinstance(hold_until, str):
@@ -362,17 +396,17 @@ async def show_hold(m: types.Message):
                 rem = ht - datetime.now()
                 if rem.total_seconds() > 0:
                     m_left = int(rem.total_seconds() // 60)
-                    text += f"⏳ ID: <code>{uid}</code> | Осталось {m_left} мин\n"
+                    text += f"⏳ {display_name} | Осталось {m_left} мин\n"
                     # ДОБАВЛЯЕМ КНОПКУ СЛЕТА
                     kb.inline_keyboard.append([
-                        InlineKeyboardButton(text=f"❌ СЛЕТ ID {uid}", callback_data=f"drophold_{uid}")
+                        InlineKeyboardButton(text=f"❌ СЛЕТ {display_name}", callback_data=f"drophold_{uid}")
                     ])
                 else:
-                    text += f"✅ ID: <code>{uid}</code> | <b>ГОТОВ К ВЫПЛАТЕ</b>\n"
+                    text += f"✅ {display_name} | <b>ГОТОВ К ВЫПЛАТЕ</b>\n"
             except:
-                text += f"⚠️ ID: <code>{uid}</code> | Ошибка времени\n"
+                text += f"⚠️ {display_name} | Ошибка времени\n"
         else:
-            text += f"⚙️ ID: <code>{uid}</code> | В процессе у админа {aid}\n"
+            text += f"⚙️ {display_name} | В процессе у админа {aid}\n"
             
     if not kb.inline_keyboard:
         await m.answer(text, parse_mode="HTML")
@@ -448,11 +482,14 @@ async def take_chat(c: types.CallbackQuery):
         return await c.answer("❌ Уже занято.")
     
     nums_data = ""
+    username_data = ""
     with get_conn() as conn:
-        row = conn.execute("SELECT numbers FROM queue WHERE user_id=?", (uid,)).fetchone()
+        row = conn.execute("SELECT numbers, username FROM queue WHERE user_id=?", (uid,)).fetchone()
         if row: 
             nums_data = row[0]
-            conn.execute("INSERT OR REPLACE INTO active_work (user_id, admin_id, numbers, status) VALUES (?, ?, ?, 'process')", (uid, c.from_user.id, nums_data))
+            username_data = row[1]
+            # Вставляем в активную работу с сохранением username
+            conn.execute("INSERT OR REPLACE INTO active_work (user_id, admin_id, username, numbers, status) VALUES (?, ?, ?, ?, 'process')", (uid, c.from_user.id, username_data, nums_data))
             conn.execute("DELETE FROM queue WHERE user_id=?", (uid,))
 
     admin_msgs = get_admin_messages(uid)
@@ -465,7 +502,15 @@ async def take_chat(c: types.CallbackQuery):
     active_chats[c.from_user.id] = uid
     if uid in WARNED_USERS: WARNED_USERS.remove(uid)
 
-    await c.message.answer(f"✅ Взял {uid}\n\nНомера:\n{nums_data}", reply_markup=chat_admin_menu)
+    display_name = username_data if username_data else f"ID {uid}"
+
+    # Красивый вывод номеров для копирования
+    await c.message.answer(
+        f"✅ <b>Взял в работу:</b> {display_name}\n\n"
+        f"📱 <b>Номера:</b>\n<code>{nums_data}</code>", 
+        parse_mode="HTML",
+        reply_markup=chat_admin_menu
+    )
     try: await bot.send_message(uid, f"📸 <b>Код запрошен!</b>\nАдминистратор отправит вам фото кода.\n⚡️ <b>У вас есть {CODE_WAIT_MIN} минуты на ввод!</b>", parse_mode="HTML", reply_markup=chat_user_menu)
     except: pass
 
@@ -488,7 +533,6 @@ async def admin_set_hold(m: types.Message):
     with get_conn() as conn:
         conn.execute("UPDATE active_work SET status='hold', hold_until=? WHERE user_id=?", (hold_end, user_id))
 
-    # ТУТ ТОЖЕ ПРЕДУПРЕЖДЕНИЕ О ЗАПРЕТЕ ОТВЯЗКИ
     await close_chat_func(
         m.from_user.id, user_id, 
         f"✅ <b>Номер принят в работу!</b>\n"
