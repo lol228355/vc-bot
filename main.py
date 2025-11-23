@@ -198,6 +198,9 @@ async def number_taken(m: types.Message):
     if not partner_id:
         return await m.answer("❌ Ошибка: партнер не найден")
     
+    # Сохраняем ID партнера перед удалением
+    user_to_notify = partner_id
+    
     # Удаляем из активных чатов
     if m.from_user.id in active_chats:
         active_chats.pop(m.from_user.id)
@@ -206,9 +209,14 @@ async def number_taken(m: types.Message):
     if partner_id in taken_by:
         taken_by.pop(partner_id)
     
-    # Отправляем сообщение пользователю
+    # Отправляем сообщение пользователю с ОБЫЧНОЙ клавиатурой
     try:
-        await bot.send_message(partner_id, "✅ <b>Номер принят!</b>\n\n💸 Тут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
+        await bot.send_message(
+            user_to_notify, 
+            "✅ <b>Номер принят!</b>\n\n💸 Тут будут отчёты и выплаты:", 
+            reply_markup=user_menu,  # ВОЗВРАЩАЕМ обычное меню
+            parse_mode="HTML"
+        )
     except Exception as e:
         logging.error(f"Ошибка отправки пользователю: {e}")
     
@@ -232,10 +240,10 @@ async def end_chat(m: types.Message):
     if partner_id and partner_id in taken_by:
         taken_by.pop(partner_id)
     
-    # Отправляем сообщение партнеру
+    # Отправляем сообщение партнеру с ВОЗВРАТОМ обычного меню
     if partner_id:
         try:
-            await bot.send_message(partner_id, "🔒 Чат закрыт админом", reply_markup=user_menu)
+            await bot.send_message(partner_id, "🔒 Чат закрыт", reply_markup=user_menu)
         except Exception as e:
             logging.error(f"Ошибка отправки партнеру: {e}")
     
