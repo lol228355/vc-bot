@@ -9,7 +9,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 
 # ==================== НАСТРОЙКИ (ВЦ) ====================
 TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
-ADMIN_IDS = [8227071592, 8340396727] # <--- Обновлено
+ADMIN_IDS = [8227071592, 8340396727] 
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 QUEUE_TIMEOUT_MIN = 15  
 DB_NAME = "bot_vc.db"   
@@ -114,8 +114,13 @@ class BannedFilter(BaseFilter):
 class AdminFilter(BaseFilter):
     async def __call__(self, m: types.Message) -> bool: return m.from_user.id in ADMIN_IDS
 
-# --- КЛАВИАТУРЫ ---
-user_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Сдать номера"), KeyboardButton(text="📊 Статус заявки")],[KeyboardButton(text="✅ Я на месте"), KeyboardButton(text="ℹ️ Условия")]], resize_keyboard=True)
+# --- КЛАВИАТУРЫ (ОБНОВЛЕНО) ---
+user_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="✨ Новая заявка")], 
+    [KeyboardButton(text="📍 Моя позиция")],
+    [KeyboardButton(text="✅ Я онлайн (Обновить таймер)")],
+    [KeyboardButton(text="💰 Условия и выплаты")]
+], resize_keyboard=True)
 admin_panel_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🟢 START WORK"), KeyboardButton(text="🔴 STOP WORK")],[KeyboardButton(text="📋 Очередь"), KeyboardButton(text="🔨 Бан"), KeyboardButton(text="🤐 Мут (24ч)")],[KeyboardButton(text="⬅️ Выход")]], resize_keyboard=True)
 chat_admin_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="💰 Номер взят"), KeyboardButton(text="🔒 Закончить чат")]], resize_keyboard=True)
 chat_user_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔒 Закончить чат")]], resize_keyboard=True)
@@ -171,26 +176,48 @@ async def mut_f(m: types.Message, state: FSMContext):
 async def start(m: types.Message, state: FSMContext):
     await state.clear()
     if m.from_user.id in active_chats: return await m.answer("⚠️ Вы в чате.", reply_markup=chat_user_menu)
-    st = "" if IS_WORK_ACTIVE else "\n🔴 <b>СТОП ВОРК</b>\n"
-    r = get_user_queue(m.from_user.id); inf = f"\n\n📊 Очередь: {queue_pos(r[1])[0]}/{queue_pos(r[1])[1]}" if r else ""
-    await m.answer(f"<b>💎 AndronWork (ВЦ)</b>\nПривет, {m.from_user.first_name}.{st}\n💵 <b>5$ / акк</b> | Холд {QUEUE_TIMEOUT_MIN} мин{inf}", reply_markup=user_menu, parse_mode="HTML")
+    st = "" if IS_WORK_ACTIVE else "🛑 <b>СТОП ВОРК: Прием приостановлен.</b>\n"
+    r = get_user_queue(m.from_user.id); inf = f"\n\n📊 Ваша позиция: {queue_pos(r[1])[0]}/{queue_pos(r[1])[1]}" if r else ""
+    
+    # --- ОБНОВЛЕННЫЙ ТЕКСТ С БОЛЬШЕЙ ИНФОРМАЦИЕЙ ---
+    msg = f"""<b>💎 AndronWork | ВЦ</b>
+{st}
+Привет, {m.from_user.first_name}!
+Добро пожаловать в рабочую систему по приему аккаунтов.
 
-@dp.message(F.text == "✅ Я на месте")
+---
+💵 Оплата: <b>5$ за аккаунт.</b>
+⏳ Таймер активности: БезХолд 15 мин. (Необходимо подтверждать присутствие).
+🚀 Канал с выплатами: [Указан в кнопке "💰 Условия и выплаты"]
+---
+
+### 💡 Как начать работу:
+1. Нажми **"✨ Новая заявка"**.
+2. Отправь **список номеров** (один номер = один аккаунт).
+3. Следи за очередью и регулярно жми **"✅ Я онлайн"**, чтобы не потерять место.
+4. Дождись, когда Админ подключится к твоему чату.
+{inf}
+"""
+    await m.answer(msg, reply_markup=user_menu, parse_mode="HTML")
+
+@dp.message(F.text == "✅ Я онлайн (Обновить таймер)") # --- ОБНОВЛЕНО ---
 async def here(m: types.Message):
     if update_timestamp(m.from_user.id):
         p, t = queue_pos(get_user_queue(m.from_user.id)[1])
-        await m.answer(f"🔄 Таймер обновлен. {p}/{t}", parse_mode="HTML")
+        await m.answer(f"🔄 Таймер обновлен. Вы в очереди: {p}/{t}", parse_mode="HTML")
     else: await m.answer("⚠️ Нет заявки.", reply_markup=user_menu)
 
-@dp.message(F.text == "ℹ️ Условия")
-async def info(m: types.Message): await m.answer(f"<b>Инфо ВЦ</b>\nСтавка: 5$\nХолд: {QUEUE_TIMEOUT_MIN} мин", parse_mode="HTML", reply_markup=info_btn)
-@dp.message(F.text == "📊 Статус заявки")
+@dp.message(F.text == "💰 Условия и выплаты") # --- ОБНОВЛЕНО ---
+async def info(m: types.Message): 
+    await m.answer(f"<b>Инфо ВЦ</b>\nСтавка: 5$ за аккаунт\nТаймер: БезХолд 15 мин\n\nВыплаты проводятся после Стоп-Ворка.", parse_mode="HTML", reply_markup=info_btn)
+    
+@dp.message(F.text == "📍 Моя позиция") # --- ОБНОВЛЕНО ---
 async def my(m: types.Message):
     r = get_user_queue(m.from_user.id)
-    if r: p,t = queue_pos(r[1]); await m.answer(f"📞 <code>{r[0]}</code>\n📍 {p}/{t}", parse_mode="HTML")
+    if r: p,t = queue_pos(r[1]); await m.answer(f"📞 Номер: <code>{r[0]}</code>\n📍 Позиция: {p}/{t}", parse_mode="HTML")
     else: await m.answer("📭 Пусто")
 
-@dp.message(F.text == "📱 Сдать номера")
+@dp.message(F.text == "✨ Новая заявка") # --- ОБНОВЛЕНО ---
 async def sub(m: types.Message, state: FSMContext):
     mt, tm = check_mute(m.from_user.id)
     if mt: return await m.answer(f"🤐 Мут еще {tm}")
@@ -208,7 +235,7 @@ async def proc(m: types.Message, state: FSMContext):
     for a in ADMIN_IDS: 
         try: await bot.send_message(a, txt, reply_markup=kb, parse_mode="HTML")
         except: pass
-    await m.answer(f"✅ Принято. Жми «Я на месте» раз в {QUEUE_TIMEOUT_MIN} мин.", reply_markup=user_menu)
+    await m.answer(f"✅ Принято. Жми **✅ Я онлайн** каждые 15 мин (БезХолд).", reply_markup=user_menu)
 
 @dp.callback_query(F.data.startswith("take_"))
 async def take(c: types.CallbackQuery):
