@@ -17,7 +17,8 @@ from aiogram.types import (
 
 # ==================== КОНФИГУРАЦИЯ ====================
 TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
-ADMIN_IDS = [8227071592, 8340396727]
+# Обновленный список админов
+ADMIN_IDS = [8448843727, 8340396727, 8227071592]
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 
 DB_NAME = "bot_vc.db"
