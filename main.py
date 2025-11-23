@@ -200,9 +200,8 @@ async def cleaner_task():
         except Exception as e: logging.error(f"Cleaner Error: {e}")
 
 # ==================== КЛАВИАТУРЫ ====================
-# ГЛАВНОЕ МЕНЮ ЮЗЕРА
 user_menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="📱 Сдать номера")], # <-- КНОПКА ИЗМЕНЕНА ПО СКРИНУ
+    [KeyboardButton(text="📱 Сдать номера")], 
     [KeyboardButton(text="📍 Моя позиция")],
     [KeyboardButton(text="✅ Я онлайн (Обновить таймер)")],
     [KeyboardButton(text="💰 Условия и выплаты")]
@@ -241,22 +240,18 @@ class AdminFilter(BaseFilter):
 @dp.message(BannedFilter())
 async def banned_handler(m: types.Message): await m.answer("⛔ <b>Вы заблокированы.</b>", parse_mode="HTML")
 
-# --- ЛОГИКА СДАЧИ НОМЕРОВ (КАК НА СКРИНЕ) ---
+# --- ЛОГИКА СДАЧИ НОМЕРОВ ---
 
 @dp.message(F.text == "📱 Сдать номера")
 async def ask_tariff(m: types.Message):
-    # Проверка мута
     is_muted, info = check_mute(m.from_user.id)
     if is_muted:
         return await m.answer(f"🤐 Вы в муте ещё {info}.")
-        
     await m.answer("Выберите тариф:", reply_markup=tariffs_kb)
 
 @dp.callback_query(F.data == "tariff_ru")
 async def tariff_chosen(c: types.CallbackQuery, state: FSMContext):
     await c.answer()
-    
-    # Проверка мута (на всякий случай)
     is_muted, info = check_mute(c.from_user.id)
     if is_muted:
         return await c.message.answer(f"🤐 Вы в муте ещё {info}.")
@@ -273,15 +268,12 @@ async def tariff_chosen(c: types.CallbackQuery, state: FSMContext):
 async def receive_numbers(m: types.Message, state: FSMContext):
     text = m.text
     if not text: return
-    
-    # Простая фильтрация
     lines = text.split('\n')
-    valid_numbers = [line.strip() for line in lines if len(line.strip()) > 7] # Простая проверка длины
+    valid_numbers = [line.strip() for line in lines if len(line.strip()) > 7]
     
     if not valid_numbers:
-        return await m.answer("❌ Не найдено корректных номеров. Попробуйте еще раз или нажмите другую кнопку в меню.", reply_markup=user_menu)
+        return await m.answer("❌ Не найдено корректных номеров.", reply_markup=user_menu)
 
-    # Добавляем в очередь
     add_to_queue(m.from_user.id, valid_numbers)
     await state.clear()
     
@@ -294,7 +286,6 @@ async def receive_numbers(m: types.Message, state: FSMContext):
         reply_markup=user_menu
     )
     
-    # Оповещение админам (тем, кто в админке или просто в списке)
     for admin_id in ADMIN_IDS:
         try: 
             await bot.send_message(admin_id, f"🆕 <b>Новая заявка (РФ)!</b>\nЮзер: {m.from_user.id}\nКол-во: {len(valid_numbers)}", parse_mode="HTML")
@@ -351,16 +342,18 @@ async def show_queue(m: types.Message):
         
     await m.answer(text, parse_mode="HTML", reply_markup=kb)
 
+# --- НОВАЯ ФУНКЦИЯ ПРОСМОТРА ХОЛДОВ С КНОПКОЙ СЛЕТА ---
 @dp.message(F.text == "📱 Номера (БезХолд)", AdminFilter())
 async def show_hold(m: types.Message):
     rows = get_active_work_list()
     if not rows: return await m.answer("📭 Пусто.")
     
     text = "📱 <b>В работе / Холд:</b>\n\n"
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
     for uid, aid, nums, status, hold_until in rows:
         if status == 'hold' and hold_until:
             try:
-                # Преобразование строки времени обратно в объект, если sqlite вернул строку
                 if isinstance(hold_until, str):
                     try: ht = datetime.fromisoformat(hold_until)
                     except: ht = datetime.strptime(hold_until, "%Y-%m-%d %H:%M:%S.%f")
@@ -369,17 +362,53 @@ async def show_hold(m: types.Message):
                 rem = ht - datetime.now()
                 if rem.total_seconds() > 0:
                     m_left = int(rem.total_seconds() // 60)
-                    text += f"✅ ID: <code>{uid}</code> | БезХолд ещё {m_left} мин\n"
+                    text += f"⏳ ID: <code>{uid}</code> | Осталось {m_left} мин\n"
+                    # ДОБАВЛЯЕМ КНОПКУ СЛЕТА
+                    kb.inline_keyboard.append([
+                        InlineKeyboardButton(text=f"❌ СЛЕТ ID {uid}", callback_data=f"drophold_{uid}")
+                    ])
                 else:
                     text += f"✅ ID: <code>{uid}</code> | <b>ГОТОВ К ВЫПЛАТЕ</b>\n"
             except:
-                text += f"✅ ID: <code>{uid}</code> | Ошибка времени\n"
+                text += f"⚠️ ID: <code>{uid}</code> | Ошибка времени\n"
         else:
             text += f"⚙️ ID: <code>{uid}</code> | В процессе у админа {aid}\n"
             
-    await m.answer(text, parse_mode="HTML")
+    if not kb.inline_keyboard:
+        await m.answer(text, parse_mode="HTML")
+    else:
+        await m.answer(text, parse_mode="HTML", reply_markup=kb)
 
-# --- БАН / МУТ СИСТЕМА ---
+# --- ОБРАБОТЧИК КНОПКИ СЛЕТА ---
+@dp.callback_query(F.data.startswith("drophold_"))
+async def admin_drop_hold_click(c: types.CallbackQuery):
+    if c.from_user.id not in ADMIN_IDS: return
+    uid = int(c.data.split("_")[1])
+    
+    # Удаляем из базы
+    with get_conn() as conn:
+        conn.execute("DELETE FROM active_work WHERE user_id=?", (uid,))
+    
+    try: await c.message.delete()
+    except: pass
+    
+    await c.message.answer(f"🗑 ID {uid} помечен как <b>СЛЕТ</b>.")
+    
+    # УВЕДОМЛЕНИЕ ЮЗЕРУ О СЛЕТЕ (СТРОГОЕ)
+    try:
+        await bot.send_message(
+            uid,
+            "❌ <b>НОМЕР СЛЕТЕЛ!</b>\n\n"
+            "Номер перестал работать раньше времени (таймер не завершен).\n"
+            "⚠️ <b>ОЧЕНЬ ВАЖНО: НЕ ОТВЯЗЫВАЙТЕ УСТРОЙСТВО!</b>\n"
+            "⚠️ <b>НЕ ВЫХОДИТЕ ИЗ АККАУНТА!</b>\n\n"
+            "Если вы отвяжете номер, оплата будет невозможна даже частично.",
+            parse_mode="HTML",
+            reply_markup=user_menu
+        )
+    except: pass
+
+# --- БАН / МУТ ---
 
 @dp.message(F.text == "🔨 Бан", AdminFilter())
 async def ban_start(m: types.Message, state: FSMContext):
@@ -459,9 +488,16 @@ async def admin_set_hold(m: types.Message):
     with get_conn() as conn:
         conn.execute("UPDATE active_work SET status='hold', hold_until=? WHERE user_id=?", (hold_end, user_id))
 
-    await close_chat_func(m.from_user.id, user_id, 
-                       f"✅ <b>Номер принят!</b>\n⏳ Пошел БезХолд {HOLD_TIME_MIN} мин.\nОжидайте выплату.",
-                       f"✅ Номер отправлен в БезХолд на {HOLD_TIME_MIN} мин.\nЧат закрыт.")
+    # ТУТ ТОЖЕ ПРЕДУПРЕЖДЕНИЕ О ЗАПРЕТЕ ОТВЯЗКИ
+    await close_chat_func(
+        m.from_user.id, user_id, 
+        f"✅ <b>Номер принят в работу!</b>\n"
+        f"⏳ Таймер запущен: {HOLD_TIME_MIN} мин.\n\n"
+        f"⚠️ <b>ВНИМАНИЕ: НЕ ОТВЯЗЫВАЙТЕ УСТРОЙСТВО!</b>\n"
+        f"Даже если кажется, что ничего не происходит, дождитесь выплаты.",
+        
+        f"✅ Номер отправлен в БезХолд на {HOLD_TIME_MIN} мин.\nЧат закрыт."
+    )
 
 @dp.message(F.text == "🔒 Закрыть чат")
 @dp.message(F.text == "🔒 Просто закрыть")
@@ -471,8 +507,6 @@ async def stop_chat_any(m: types.Message):
     partner = get_current_chat_user(sender)
     if not partner: return await m.answer("Нет чата.", reply_markup=user_menu)
     
-    # Удаляем из active_work, если это разрыв связи, а не успешный холд
-    # Если админ жмет, то удаляем
     with get_conn() as conn: conn.execute("DELETE FROM active_work WHERE user_id=?", (partner if sender in ADMIN_IDS else sender,))
 
     if sender in ADMIN_IDS:
@@ -480,10 +514,9 @@ async def stop_chat_any(m: types.Message):
     else:
         await close_chat_func(partner, sender, "🔒 Вы закрыли чат.", "🔒 Юзер закрыл чат.")
 
-# ФОТО ОТ АДМИНА
 @dp.message(F.photo)
 async def photo_bridge(m: types.Message):
-    if m.from_user.id not in ADMIN_IDS: return # Юзерам нельзя слать фото (можно разрешить если надо)
+    if m.from_user.id not in ADMIN_IDS: return 
     partner = get_current_chat_user(m.from_user.id)
     if partner:
         try: 
@@ -499,7 +532,6 @@ async def chat_bridge(m: types.Message):
         try: await m.copy_to(partner)
         except: await m.answer("❌ Ошибка доставки")
     elif m.from_user.id not in ADMIN_IDS:
-        # Если юзер пишет что-то, но не в режиме ввода номеров и не в чате
         await m.answer("🤖 Используйте меню.", reply_markup=user_menu)
 
 async def main():
