@@ -75,17 +75,17 @@ async def cleaner_task():
 
 # ==================== КРАСИВЫЕ КЛАВИАТУРЫ ====================
 user_menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="Сдать номера"), KeyboardButton(text="Мои номера")],
-    [KeyboardButton(text="Я тут")]
+    [KeyboardButton(text="📱 Сдать номера"), KeyboardButton(text="📊 Мои номера")],
+    [KeyboardButton(text="✅ Я тут")]
 ], resize_keyboard=True)
 
 admin_menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="Номер взят")],
-    [KeyboardButton(text="Закончить чат")]
+    [KeyboardButton(text="💰 Номер взят")],
+    [KeyboardButton(text="🔒 Закончить чат")]
 ], resize_keyboard=True)
 
 payout_btn = InlineKeyboardMarkup(inline_keyboard=[[
-    InlineKeyboardButton(text="Тут будут отчёты и выплаты", url=PAYOUT_CHANNEL)
+    InlineKeyboardButton(text="💸 Тут будут отчёты и выплаты", url=PAYOUT_CHANNEL)
 ]])
 
 # ==================== СТАРТ ====================
@@ -96,52 +96,52 @@ async def start(m: types.Message, state: FSMContext):
     queue_info = ""
     if row:
         pos, total = queue_position(row[1])
-        queue_info = f"\n\nТвои номера в очереди: <b>{pos}</b> из <b>{total}</b>"
+        queue_info = f"\n\n🎯 Твои номера в очереди: <b>#{pos}</b> из <b>{total}</b>"
 
-    await m.answer(f"""<b>AndronWork</b>
+    await m.answer(f"""<b>🚀 AndronWork</b>
 
-Привет, <b>{html.escape(m.from_user.first_name)}</b>!
+👋 Привет, <b>{html.escape(m.from_user.first_name)}</b>!
 
-<b>ВЦ по 5$ — 15 минут — без холда</b>
+💎 <b>ВЦ по 5$ — 15 минут — без холда</b>
 
-<b>Самые быстрые и честные выплаты</b>
-<b>Никаких скамов и задержек</b>
+⚡️ <b>Самые быстрые и честные выплаты</b>
+🛡 <b>Никаких скамов и задержек</b>
 
-Жми «Я тут» каждые 15 минут — и ты в деле!{queue_info}""",
+⏰ Жми «✅ Я тут» каждые 15 минут — и ты в деле!{queue_info}""",
                    reply_markup=user_menu, parse_mode="HTML")
 
-@dp.message(F.text == "Я тут")
+@dp.message(F.text == "✅ Я тут")
 async def im_here(m: types.Message):
     row = get_user_numbers(m.from_user.id)
     if row:
         pos, total = queue_position(row[1])
-        await m.answer(f"Ты в сети!\nМесто в очереди: <b>{pos}/{total}</b>", parse_mode="HTML")
+        await m.answer(f"🟢 Ты в сети!\n🎯 Место в очереди: <b>#{pos}/{total}</b>", parse_mode="HTML")
     else:
-        await m.answer("Ты в сети — можно сдавать номера!")
+        await m.answer("🟢 Ты в сети — можно сдавать номера! 📱")
 
-@dp.message(F.text == "Мои номера")
+@dp.message(F.text == "📊 Мои номера")
 async def my_numbers(m: types.Message):
     row = get_user_numbers(m.from_user.id)
     if not row:
-        return await m.answer("<b>Номеров в очереди нет</b>\n\nНажми «Сдать номера»", parse_mode="HTML")
+        return await m.answer("❌ <b>Номеров в очереди нет</b>\n\nНажми «📱 Сдать номера»", parse_mode="HTML")
     
     numbers = row[0].replace("\n", "\n")
     pos, total = queue_position(row[1])
-    await m.answer(f"""<b>Твои номера в очереди</b>
+    await m.answer(f"""<b>📊 Твои номера в очереди</b>
 
-{numbers}
+📞 {numbers}
 
-<b>Позиция в очереди: {pos} из {total}</b>""", parse_mode="HTML")
+🎯 <b>Позиция в очереди: #{pos} из {total}</b>""", parse_mode="HTML")
 
 class NumbersState(StatesGroup):
     waiting = State()
 
-@dp.message(F.text == "Сдать номера")
+@dp.message(F.text == "📱 Сдать номера")
 async def ask_numbers(m: types.Message, state: FSMContext):
     if m.from_user.id in active_chats:
-        return await m.answer("Ты уже в чате с админом")
+        return await m.answer("⚠️ Ты уже в чате с админом")
     await state.set_state(NumbersState.waiting)
-    await m.answer("Кидай номера по одному на строку:")
+    await m.answer("📱 Кидай номера по одному на строку:\n\n<code>+79991234567\n89991234567\n79991234567</code>", parse_mode="HTML")
 
 @dp.message(NumbersState.waiting)
 async def receive_numbers(m: types.Message, state: FSMContext):
@@ -152,59 +152,59 @@ async def receive_numbers(m: types.Message, state: FSMContext):
 
     nums = [x.strip() for x in m.text.splitlines() if re.match(r"^(\+7|7|8)?\d{10}$", x.strip())]
     if not nums:
-        return await m.answer("Не нашёл валидных номеров")
+        return await m.answer("❌ Не нашёл валидных номеров\n\n📱 Формат: +79991234567 или 89991234567")
 
     add_to_queue(m.from_user.id, nums)
     await state.clear()
 
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Взять", callback_data=f"take_{m.from_user.id}")]])
-    text = f"""<b>AndronWork | НОВАЯ ЗАЯВКА</b>
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎯 Взять", callback_data=f"take_{m.from_user.id}")]])
+    text = f"""<b>🚀 AndronWork | НОВАЯ ЗАЯВКА</b>
 
-От: <a href='tg://user?id={m.from_user.id}'>{html.escape(m.from_user.first_name)}</a>
-ID: <code>{m.from_user.id}</code>
+👤 От: <a href='tg://user?id={m.from_user.id}'>{html.escape(m.from_user.first_name)}</a>
+🆔 ID: <code>{m.from_user.id}</code>
 
-Номера:
+📞 Номера:
 <code>{html.escape('\n'.join(nums))}</code>"""
 
     for admin in ADMIN_IDS:
         try: await bot.send_message(admin, text, reply_markup=kb, parse_mode="HTML")
         except: pass
 
-    await m.answer("<b>Заявка успешно добавлена в очередь!</b>\n\nЖми «Я тут» каждые 15 минут", reply_markup=user_menu, parse_mode="HTML")
+    await m.answer("✅ <b>Заявка успешно добавлена в очередь!</b>\n\n⏰ Жми «✅ Я тут» каждые 15 минут", reply_markup=user_menu, parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("take_"))
 async def take_order(cb: types.CallbackQuery):
     uid = int(cb.data.split("_")[1])
     if uid in taken_by:
-        return await cb.answer("Уже взято другим админом!", show_alert=True)
+        return await cb.answer("❌ Уже взято другим админом!", show_alert=True)
     
     taken_by[uid] = cb.from_user.id
     active_chats[uid] = cb.from_user.id
     active_chats[cb.from_user.id] = uid
 
     await cb.message.edit_reply_markup(reply_markup=None)
-    await bot.send_message(cb.from_user.id, "Чат с пользователем открыт", reply_markup=admin_menu)
-    await bot.send_message(uid, "Админ на связи! Ожидай", reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Закончить чат")]], resize_keyboard=True))
-    await cb.answer()
+    await bot.send_message(cb.from_user.id, "💬 Чат с пользователем открыт", reply_markup=admin_menu)
+    await bot.send_message(uid, "👨‍💼 Админ на связи! Ожидай выплаты 💸", reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🔒 Закончить чат")]], resize_keyboard=True))
+    await cb.answer("✅ Вы взяли заявку!")
 
-@dp.message(F.text == "Номер взят")
+@dp.message(F.text == "💰 Номер взят")
 async def number_taken(m: types.Message):
     if m.from_user.id not in active_chats: return
     uid = active_chats.pop(m.from_user.id)
     active_chats.pop(uid, None)
     taken_by.pop(uid, None)
-    await bot.send_message(uid, "<b>Номер принят!</b>\n\nТут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
-    await m.answer("Выплата отправлена", reply_markup=user_menu)
+    await bot.send_message(uid, "✅ <b>Номер принят!</b>\n\n💸 Тут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
+    await m.answer("💸 Выплата отправлена", reply_markup=user_menu)
 
-@dp.message(F.text == "Закончить чат")
+@dp.message(F.text == "🔒 Закончить чат")
 async def end_chat(m: types.Message):
     partner = active_chats.pop(m.from_user.id, None)
     if partner:
         active_chats.pop(partner, None)
         taken_by.pop(m.from_user.id, None)
-        try: await bot.send_message(partner, "Чат закрыт")
+        try: await bot.send_message(partner, "🔒 Чат закрыт")
         except: pass
-    await m.answer("Чат закрыт", reply_markup=user_menu)
+    await m.answer("🔒 Чат закрыт", reply_markup=user_menu)
 
 @dp.message()
 async def bridge(m: types.Message):
@@ -216,7 +216,7 @@ async def bridge(m: types.Message):
 async def main():
     asyncio.create_task(cleaner_task())
     await bot.delete_webhook(drop_pending_updates=True)
-    print("AndronWork — САМОЕ КРАСИВОЕ ОФОРМЛЕНИЕ 2025 — запущено!")
+    print("🚀 AndronWork — САМОЕ КРАСИВОЕ ОФОРМЛЕНИЕ 2025 — запущено! 💎")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
