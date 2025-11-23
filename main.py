@@ -174,8 +174,6 @@ chat_user_menu = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="🔒 Закончить чат")]
 ], resize_keyboard=True)
 
-info_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📂 Перейти к выплатам", url=PAYOUT_CHANNEL)]])
-
 # ==================== HANDLERS ====================
 class AdminStates(StatesGroup): waiting_ban = State(); waiting_mute = State()
 class UserStates(StatesGroup): waiting_nums = State()
@@ -252,19 +250,30 @@ async def cmd_start(m: types.Message, state: FSMContext):
     
     st_text = "" if IS_WORK_ACTIVE else "\n🔴 <b>СТОП ВОРК</b>"
     
+    # --- РЕКЛАМА ВТОРОГО БОТА (ВК) ---
     msg = f"""<b>💎 AndronWork | ВЦ</b>{st_text}
 
 Привет, {html.escape(m.from_user.first_name)}!
-Принимаем ВЦ.
+Принимаем ВЦ (WhatsApp).
 
 💰 Цена: <b>5$ / акк</b>
 ⏳ Холд: <b>Нет</b>
-⏱ Таймер: {QUEUE_TIMEOUT_MIN} мин"""
+⏱ Таймер: {QUEUE_TIMEOUT_MIN} мин
+
+🏦 <b>Также скупаем ВКонтакте!</b>
+Платим 3$ за аккаунт. Переходи: @AndronWorkVK_bot
+
+👇 <b>Меню:</b>"""
     await m.answer(msg, reply_markup=user_menu, parse_mode="HTML")
 
 @dp.message(F.text == "💰 Условия и выплаты")
 async def cmd_info(m: types.Message):
-    await m.answer("📃 <b>Инфо ВЦ</b>\n\n💵 5$\n🚀 Выплаты после стопа", parse_mode="HTML", reply_markup=info_btn)
+    # --- КНОПКА ССЫЛКА НА ВТОРОГО БОТА ---
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📂 Канал с выплатами", url=PAYOUT_CHANNEL)],
+        [InlineKeyboardButton(text="🏦 Сдать ВКонтакте (3$)", url="https://t.me/AndronWorkVK_bot")]
+    ])
+    await m.answer("📃 <b>Инфо ВЦ</b>\n\n💵 5$\n🚀 Выплаты после стопа\n\n💡 Есть ВК? Мы купим!", parse_mode="HTML", reply_markup=kb)
 
 @dp.message(F.text == "✅ Я онлайн (Обновить таймер)")
 async def cmd_online(m: types.Message):
