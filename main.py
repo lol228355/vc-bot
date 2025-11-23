@@ -8,11 +8,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 # ==================== НАСТРОЙКИ (ВЦ) ====================
-TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"  # <--- ТУТ ТОКЕН ДЛЯ ВЦ
-ADMIN_IDS = [8448843727, 8227071592]
+TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
+ADMIN_IDS = [8227071592, 8340396727] # <--- Обновлено
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
-QUEUE_TIMEOUT_MIN = 15  # 15 минут
-DB_NAME = "bot_vc.db"   # Своя база данных
+QUEUE_TIMEOUT_MIN = 15  
+DB_NAME = "bot_vc.db"   
 
 IS_WORK_ACTIVE = True
 
@@ -252,5 +252,12 @@ async def brg(m: types.Message):
         except: await m.answer("❌ Ошибка")
     elif m.from_user.id not in ADMIN_IDS: await m.answer("🤖 Используй меню.", reply_markup=user_menu)
 
+# --- ИСПРАВЛЕННЫЙ ЗАПУСК ---
+async def main():
+    asyncio.create_task(cleaner_task())
+    await bot.delete_webhook(drop_pending_updates=True) 
+    print("🚀 Bot VC Started")
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    asyncio.run(cleaner_task()); asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())
