@@ -146,9 +146,11 @@ async def ask_numbers(m: types.Message, state: FSMContext):
 @dp.message(NumbersState.waiting)
 async def receive_numbers(m: types.Message, state: FSMContext):
     if m.from_user.id in active_chats:
-        try: await m.copy_to(active_chats[m.from_user.id])
-        except: pass
-        return
+        try: 
+            await m.copy_to(active_chats[m.from_user.id])
+            return
+        except: 
+            pass
 
     nums = [x.strip() for x in m.text.splitlines() if re.match(r"^(\+7|7|8)?\d{10}$", x.strip())]
     if not nums:
@@ -189,29 +191,73 @@ async def take_order(cb: types.CallbackQuery):
 
 @dp.message(F.text == "💰 Номер взят")
 async def number_taken(m: types.Message):
-    if m.from_user.id not in active_chats: return
-    uid = active_chats.pop(m.from_user.id)
-    active_chats.pop(uid, None)
-    taken_by.pop(uid, None)
-    await bot.send_message(uid, "✅ <b>Номер принят!</b>\n\n💸 Тут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
-    await m.answer("💸 Выплата отправлена", reply_markup=user_menu)
+    if m.from_user.id not in active_chats:
+        return await m.answer("❌ Нет активного чата")
+    
+    partner_id = active_chats.get(m.from_user.id)
+    if not partner_id:
+        return await m.answer("❌ Ошибка: партнер не найден")
+    
+    # Удаляем из активных чатов
+    if m.from_user.id in active_chats:
+        active_chats.pop(m.from_user.id)
+    if partner_id in active_chats:
+        active_chats.pop(partner_id)
+    if partner_id in taken_by:
+        taken_by.pop(partner_id)
+    
+    # Отправляем сообщение пользователю
+    try:
+        await bot.send_message(partner_id, "✅ <b>Номер принят!</b>\n\n💸 Тут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Ошибка отправки пользователю: {e}")
+    
+    await m.answer("💸 Выплата отправлена пользователю", reply_markup=admin_menu)
 
 @dp.message(F.text == "🔒 Закончить чат")
 async def end_chat(m: types.Message):
-    partner = active_chats.pop(m.from_user.id, None)
-    if partner:
-        active_chats.pop(partner, None)
-        taken_by.pop(m.from_user.id, None)
-        try: await bot.send_message(partner, "🔒 Чат закрыт")
-        except: pass
-    await m.answer("🔒 Чат закрыт", reply_markup=user_menu)
+    partner_id = None
+    
+    # Находим партнера по чату
+    if m.from_user.id in active_chats:
+        partner_id = active_chats[m.from_user.id]
+        active_chats.pop(m.from_user.id)
+    
+    if partner_id and partner_id in active_chats:
+        active_chats.pop(partner_id)
+    
+    # Удаляем из taken_by
+    if m.from_user.id in taken_by:
+        taken_by.pop(m.from_user.id)
+    if partner_id and partner_id in taken_by:
+        taken_by.pop(partner_id)
+    
+    # Отправляем сообщение партнеру
+    if partner_id:
+        try:
+            await bot.send_message(partner_id, "🔒 Чат закрыт админом", reply_markup=user_menu)
+        except Exception as e:
+            logging.error(f"Ошибка отправки партнеру: {e}")
+    
+    # Отправляем сообщение отправителю
+    if m.from_user.id in ADMIN_IDS:
+        await m.answer("🔒 Чат закрыт", reply_markup=admin_menu)
+    else:
+        await m.answer("🔒 Чат закрыт", reply_markup=user_menu)
 
 @dp.message()
 async def bridge(m: types.Message):
-    if m.text and m.text.startswith("/"): return
+    if m.text and m.text.startswith("/"): 
+        return
+    
+    # Проверяем, находится ли пользователь в активном чате
     if m.from_user.id in active_chats:
-        try: await m.copy_to(active_chats[m.from_user.id])
-        except: pass
+        partner_id = active_chats[m.from_user.id]
+        try: 
+            await m.copy_to(partner_id)
+        except Exception as e:
+            logging.error(f"Ошибка пересылки сообщения: {e}")
+            await m.answer("❌ Не удалось отправить сообщение")
 
 async def main():
     asyncio.create_task(cleaner_task())
