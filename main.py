@@ -1,4 +1,4 @@
-# AndronWork — финальная исправленная версия (кнопка "Мои номера" теперь работает!)
+# AndronWork — САМОЕ КРАСИВОЕ ОФОРМЛЕНИЕ 2025
 import asyncio, logging, sqlite3, re, html
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -49,7 +49,7 @@ def get_user_numbers(uid):
                    ORDER BY id DESC LIMIT 1""", (uid,))
     row = cur.fetchone()
     conn.close()
-    return row  # (numbers, id) или None
+    return row
 
 def queue_position(my_id):
     conn = sqlite3.connect("bot.db")
@@ -73,7 +73,7 @@ async def cleaner_task():
         await asyncio.sleep(180)
         clean_old()
 
-# ==================== КЛАВИАТУРЫ ====================
+# ==================== КРАСИВЫЕ КЛАВИАТУРЫ ====================
 user_menu = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="Сдать номера"), KeyboardButton(text="Мои номера")],
     [KeyboardButton(text="Я тут")]
@@ -88,7 +88,7 @@ payout_btn = InlineKeyboardMarkup(inline_keyboard=[[
     InlineKeyboardButton(text="Тут будут отчёты и выплаты", url=PAYOUT_CHANNEL)
 ]])
 
-# ==================== СТАРТ И КНОПКИ ====================
+# ==================== СТАРТ ====================
 @dp.message(Command("start"))
 async def start(m: types.Message, state: FSMContext):
     await state.clear()
@@ -98,15 +98,16 @@ async def start(m: types.Message, state: FSMContext):
         pos, total = queue_position(row[1])
         queue_info = f"\n\nТвои номера в очереди: <b>{pos}</b> из <b>{total}</b>"
 
-    await m.answer(f"""AndronWork
+    await m.answer(f"""<b>AndronWork</b>
 
 Привет, <b>{html.escape(m.from_user.first_name)}</b>!
 
 <b>ВЦ по 5$ — 15 минут — без холда</b>
 
-<i>Самые быстрые выплаты в нише</i>
+<b>Самые быстрые и честные выплаты</b>
+<b>Никаких скамов и задержек</b>
 
-Жми «Я тут» каждые 15 минут!{queue_info}""",
+Жми «Я тут» каждые 15 минут — и ты в деле!{queue_info}""",
                    reply_markup=user_menu, parse_mode="HTML")
 
 @dp.message(F.text == "Я тут")
@@ -114,7 +115,7 @@ async def im_here(m: types.Message):
     row = get_user_numbers(m.from_user.id)
     if row:
         pos, total = queue_position(row[1])
-        await m.answer(f"Ты в сети!\nМесто: <b>{pos}</b> из <b>{total}</b>", parse_mode="HTML")
+        await m.answer(f"Ты в сети!\nМесто в очереди: <b>{pos}/{total}</b>", parse_mode="HTML")
     else:
         await m.answer("Ты в сети — можно сдавать номера!")
 
@@ -122,15 +123,15 @@ async def im_here(m: types.Message):
 async def my_numbers(m: types.Message):
     row = get_user_numbers(m.from_user.id)
     if not row:
-        return await m.answer("У тебя нет активных номеров в очереди\n\nНажми «Сдать номера»")
+        return await m.answer("<b>Номеров в очереди нет</b>\n\nНажми «Сдать номера»", parse_mode="HTML")
     
-    numbers = row[0].replace("\n", "   │   ")
+    numbers = row[0].replace("\n", "\n")
     pos, total = queue_position(row[1])
-    await m.answer(f"""Твои номера в очереди
+    await m.answer(f"""<b>Твои номера в очереди</b>
 
 {numbers}
 
-Место в очереди: <b>{pos}</b> из <b>{total}</b>""", parse_mode="HTML")
+<b>Позиция в очереди: {pos} из {total}</b>""", parse_mode="HTML")
 
 class NumbersState(StatesGroup):
     waiting = State()
@@ -151,13 +152,13 @@ async def receive_numbers(m: types.Message, state: FSMContext):
 
     nums = [x.strip() for x in m.text.splitlines() if re.match(r"^(\+7|7|8)?\d{10}$", x.strip())]
     if not nums:
-        return await m.answer("Нет валидных номеров! Попробуй ещё раз")
+        return await m.answer("Не нашёл валидных номеров")
 
     add_to_queue(m.from_user.id, nums)
     await state.clear()
 
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Взять", callback_data=f"take_{m.from_user.id}")]])
-    text = f"""AndronWork | НОВАЯ ЗАЯВКА
+    text = f"""<b>AndronWork | НОВАЯ ЗАЯВКА</b>
 
 От: <a href='tg://user?id={m.from_user.id}'>{html.escape(m.from_user.first_name)}</a>
 ID: <code>{m.from_user.id}</code>
@@ -169,7 +170,7 @@ ID: <code>{m.from_user.id}</code>
         try: await bot.send_message(admin, text, reply_markup=kb, parse_mode="HTML")
         except: pass
 
-    await m.answer("Заявка добавлена в очередь!\nЖми «Я тут» каждые 15 минут", reply_markup=user_menu)
+    await m.answer("<b>Заявка успешно добавлена в очередь!</b>\n\nЖми «Я тут» каждые 15 минут", reply_markup=user_menu, parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("take_"))
 async def take_order(cb: types.CallbackQuery):
@@ -182,7 +183,7 @@ async def take_order(cb: types.CallbackQuery):
     active_chats[cb.from_user.id] = uid
 
     await cb.message.edit_reply_markup(reply_markup=None)
-    await bot.send_message(cb.from_user.id, "Чат открыт", reply_markup=admin_menu)
+    await bot.send_message(cb.from_user.id, "Чат с пользователем открыт", reply_markup=admin_menu)
     await bot.send_message(uid, "Админ на связи! Ожидай", reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Закончить чат")]], resize_keyboard=True))
     await cb.answer()
 
@@ -192,7 +193,7 @@ async def number_taken(m: types.Message):
     uid = active_chats.pop(m.from_user.id)
     active_chats.pop(uid, None)
     taken_by.pop(uid, None)
-    await bot.send_message(uid, "Номер принят!\n\nТут будут отчёты и выплаты:", reply_markup=payout_btn)
+    await bot.send_message(uid, "<b>Номер принят!</b>\n\nТут будут отчёты и выплаты:", reply_markup=payout_btn, parse_mode="HTML")
     await m.answer("Выплата отправлена", reply_markup=user_menu)
 
 @dp.message(F.text == "Закончить чат")
@@ -215,7 +216,7 @@ async def bridge(m: types.Message):
 async def main():
     asyncio.create_task(cleaner_task())
     await bot.delete_webhook(drop_pending_updates=True)
-    print("AndronWork — всё работает идеально!")
+    print("AndronWork — САМОЕ КРАСИВОЕ ОФОРМЛЕНИЕ 2025 — запущено!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
