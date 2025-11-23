@@ -17,18 +17,16 @@ from aiogram.types import (
 
 # ==================== КОНФИГУРАЦИЯ ====================
 TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
-# Обновленный список админов
 ADMIN_IDS = [8448843727, 8340396727, 8227071592]
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 
 DB_NAME = "bot_vc.db"
-QUEUE_TIMEOUT_MIN = 15      # Полное время жизни
-WARNING_TIME_MIN = 5        # Предупреждение за 5 минут
+QUEUE_TIMEOUT_MIN = 15      
+WARNING_TIME_MIN = 5        
 
 IS_WORK_ACTIVE = True
 WARNED_USERS = set()
 
-# ==================== ИНИЦИАЛИЗАЦИЯ ====================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -52,13 +50,27 @@ def init_db():
                 mute_until TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS active_work (
+                user_id INTEGER PRIMARY KEY,
+                admin_id INTEGER,
+                numbers TEXT,
+                start_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admin_messages (
+                user_id INTEGER,
+                admin_id INTEGER,
+                message_id INTEGER
+            )
+        """)
         try: conn.execute("ALTER TABLE users ADD COLUMN mute_until TIMESTAMP")
         except: pass
 
 init_db()
 
-def get_conn():
-    return sqlite3.connect(DB_NAME)
+def get_conn(): return sqlite3.connect(DB_NAME)
 
 def get_ban_status(uid):
     with get_conn() as conn:
@@ -71,6 +83,7 @@ def set_ban_status(uid, status):
         conn.execute("UPDATE users SET is_banned = ? WHERE user_id = ?", (status, uid))
         if status == 1:
             conn.execute("DELETE FROM queue WHERE user_id=?", (uid,))
+            delete_admin_messages_for_user(uid)
 
 def set_mute(uid, hours=24):
     expiry = datetime.now() + timedelta(hours=hours)
@@ -78,6 +91,7 @@ def set_mute(uid, hours=24):
         conn.execute("INSERT OR IGNORE INTO users (user_id, is_banned) VALUES (?, 0)", (uid,))
         conn.execute("UPDATE users SET mute_until = ? WHERE user_id = ?", (expiry, uid))
         conn.execute("DELETE FROM queue WHERE user_id=?", (uid,))
+        delete_admin_messages_for_user(uid)
 
 def check_mute(uid):
     with get_conn() as conn:
@@ -87,7 +101,6 @@ def check_mute(uid):
             except: 
                 try: mute_time = datetime.strptime(str(res[0]), "%Y-%m-%d %H:%M:%S.%f")
                 except: return False, ""
-            
             if mute_time > datetime.now():
                 rem = mute_time - datetime.now()
                 h, r = divmod(rem.seconds, 3600)
@@ -99,6 +112,18 @@ def add_to_queue(uid, numbers):
     with get_conn() as conn:
         conn.execute("REPLACE INTO queue (user_id, numbers, ts) VALUES (?, ?, CURRENT_TIMESTAMP)", (uid, "\n".join(numbers)))
 
+def save_admin_message(user_id, admin_id, message_id):
+    with get_conn() as conn:
+        conn.execute("INSERT INTO admin_messages (user_id, admin_id, message_id) VALUES (?, ?, ?)", (user_id, admin_id, message_id))
+
+def get_admin_messages(user_id):
+    with get_conn() as conn:
+        return conn.execute("SELECT admin_id, message_id FROM admin_messages WHERE user_id=?", (user_id,)).fetchall()
+
+def delete_admin_messages_for_user(user_id):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM admin_messages WHERE user_id=?", (user_id,))
+
 def update_timestamp(uid):
     with get_conn() as conn:
         cur = conn.cursor()
@@ -106,12 +131,13 @@ def update_timestamp(uid):
         return cur.rowcount > 0
 
 def get_queue_info(uid):
-    with get_conn() as conn:
-        return conn.execute("SELECT numbers, id FROM queue WHERE user_id = ?", (uid,)).fetchone()
+    with get_conn() as conn: return conn.execute("SELECT numbers, id FROM queue WHERE user_id = ?", (uid,)).fetchone()
 
 def get_all_queue():
-    with get_conn() as conn:
-        return conn.execute("SELECT user_id, numbers FROM queue ORDER BY id ASC").fetchall()
+    with get_conn() as conn: return conn.execute("SELECT user_id, numbers FROM queue ORDER BY id ASC").fetchall()
+
+def get_active_work_list():
+    with get_conn() as conn: return conn.execute("SELECT user_id, admin_id, numbers FROM active_work").fetchall()
 
 def get_position(row_id):
     with get_conn() as conn:
@@ -119,7 +145,7 @@ def get_position(row_id):
         total = conn.execute("SELECT COUNT(*) FROM queue").fetchone()[0]
         return pos, total
 
-# ==================== CLEANER TASK ====================
+# ==================== CLEANER ====================
 async def cleaner_task():
     while True:
         await asyncio.sleep(60)
@@ -127,31 +153,31 @@ async def cleaner_task():
             now = datetime.now()
             with get_conn() as conn:
                 rows = conn.execute("SELECT user_id, ts FROM queue").fetchall()
-                
             for uid, ts_str in rows:
                 try:
                     try: ts = datetime.fromisoformat(ts_str)
                     except: ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
                 except: continue
-
                 diff_minutes = (now - ts).total_seconds() / 60
-
+                
                 if diff_minutes >= QUEUE_TIMEOUT_MIN:
-                    with get_conn() as conn:
-                        conn.execute("DELETE FROM queue WHERE user_id = ?", (uid,))
+                    msgs = get_admin_messages(uid)
+                    for aid, mid in msgs:
+                        try: await bot.delete_message(chat_id=aid, message_id=mid)
+                        except: pass
+                    delete_admin_messages_for_user(uid)
+                    
+                    with get_conn() as conn: conn.execute("DELETE FROM queue WHERE user_id = ?", (uid,))
                     if uid in WARNED_USERS: WARNED_USERS.remove(uid)
-                    try:
-                        await bot.send_message(uid, "❌ <b>Тайм-аут.</b> Заявка удалена.", parse_mode="HTML", reply_markup=user_menu)
+                    try: await bot.send_message(uid, "❌ <b>Тайм-аут.</b> Заявка удалена.", parse_mode="HTML", reply_markup=user_menu)
                     except: pass
                 
                 elif diff_minutes >= (QUEUE_TIMEOUT_MIN - WARNING_TIME_MIN):
                     if uid not in WARNED_USERS:
                         WARNED_USERS.add(uid)
-                        try:
-                            await bot.send_message(uid, f"⚠️ <b>Предупреждение!</b>\nЧерез {WARNING_TIME_MIN} мин удалим заявку.\nЖмите <b>«✅ Я онлайн»</b>.", parse_mode="HTML")
+                        try: await bot.send_message(uid, f"⚠️ <b>Внимание!</b>\nЧерез {WARNING_TIME_MIN} мин удаление.\nЖмите <b>«✅ Я онлайн»</b>!", parse_mode="HTML")
                         except: pass
-        except Exception as e:
-            logging.error(f"Cleaner Error: {e}")
+        except Exception as e: logging.error(f"Cleaner Error: {e}")
 
 # ==================== КЛАВИАТУРЫ ====================
 user_menu = ReplyKeyboardMarkup(keyboard=[
@@ -163,12 +189,14 @@ user_menu = ReplyKeyboardMarkup(keyboard=[
 
 admin_panel_kb = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="🟢 START WORK"), KeyboardButton(text="🔴 STOP WORK")],
-    [KeyboardButton(text="📋 Очередь"), KeyboardButton(text="🔨 Бан"), KeyboardButton(text="🤐 Мут (24ч)")],
+    [KeyboardButton(text="📋 Очередь"), KeyboardButton(text="📱 Номера в работе")],
+    [KeyboardButton(text="🔨 Бан"), KeyboardButton(text="🤐 Мут (24ч)")],
     [KeyboardButton(text="⬅️ Выход")]
 ], resize_keyboard=True)
 
 chat_admin_menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="💰 Номер взят"), KeyboardButton(text="🔒 Закончить чат")]
+    [KeyboardButton(text="✅ ГУД (Оплата)"), KeyboardButton(text="❌ СЛЕТЕЛ")],
+    [KeyboardButton(text="🔒 Просто закрыть")]
 ], resize_keyboard=True)
 
 chat_user_menu = ReplyKeyboardMarkup(keyboard=[
@@ -178,15 +206,13 @@ chat_user_menu = ReplyKeyboardMarkup(keyboard=[
 # ==================== HANDLERS ====================
 class AdminStates(StatesGroup): waiting_ban = State(); waiting_mute = State()
 class UserStates(StatesGroup): waiting_nums = State()
-
 class BannedFilter(BaseFilter):
     async def __call__(self, m: types.Message) -> bool: return get_ban_status(m.from_user.id) == 1
 class AdminFilter(BaseFilter):
     async def __call__(self, m: types.Message) -> bool: return m.from_user.id in ADMIN_IDS
 
 @dp.message(BannedFilter())
-async def banned_handler(m: types.Message):
-    await m.answer("⛔ <b>Вы заблокированы.</b>", parse_mode="HTML")
+async def banned_handler(m: types.Message): await m.answer("⛔ <b>Вы заблокированы.</b>", parse_mode="HTML")
 
 # --- АДМИНКА ---
 @dp.message(Command("admin"), AdminFilter())
@@ -195,8 +221,7 @@ async def admin_start(m: types.Message):
     await m.answer(f"🔧 <b>Админ-панель (ВЦ)</b>\nСтатус: {status}", reply_markup=admin_panel_kb, parse_mode="HTML")
 
 @dp.message(F.text == "⬅️ Выход", AdminFilter())
-async def admin_exit(m: types.Message):
-    await m.answer("Выход.", reply_markup=user_menu)
+async def admin_exit(m: types.Message): await m.answer("Выход.", reply_markup=user_menu)
 
 @dp.message(F.text == "🟢 START WORK", AdminFilter())
 async def start_work(m: types.Message):
@@ -216,7 +241,16 @@ async def show_queue(m: types.Message):
     for uid, nums in rows:
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ ПРИНЯТЬ", callback_data=f"take_{uid}")]])
         first_num = nums.splitlines()[0]
-        await m.answer(f"👤 ID: <code>{uid}</code>\n📞: {html.escape(first_num)}...", reply_markup=kb, parse_mode="HTML")
+        await m.answer(f"👤 ID: <code>{uid}</code>\n📞 Номер:\n<code>{first_num}</code>", reply_markup=kb, parse_mode="HTML")
+
+@dp.message(F.text == "📱 Номера в работе", AdminFilter())
+async def show_active_work(m: types.Message):
+    rows = get_active_work_list()
+    if not rows: return await m.answer("📭 Никто не делает номера.")
+    msg = "📱 <b>Номера в работе:</b>\n\n"
+    for uid, admin_id, nums in rows:
+        msg += f"👤 User: <code>{uid}</code>\n👮 Admin: <code>{admin_id}</code>\n📞: <code>{nums.splitlines()[0]}</code>\n\n"
+    await m.answer(msg, parse_mode="HTML")
 
 @dp.message(F.text == "🔨 Бан", AdminFilter())
 async def ban_ask(m: types.Message, state: FSMContext):
@@ -248,18 +282,11 @@ async def mute_exec(m: types.Message, state: FSMContext):
 async def cmd_start(m: types.Message, state: FSMContext):
     await state.clear()
     if m.from_user.id in active_chats: return await m.answer("⚠️ Вы в чате!", reply_markup=chat_user_menu)
-    
     st_text = "" if IS_WORK_ACTIVE else "\n🔴 <b>СТОП ВОРК</b>"
-    
-    # --- РЕКЛАМА ВТОРОГО БОТА (ВК) ---
     msg = f"""<b>💎 AndronWork | ВЦ</b>{st_text}
-
 Привет, {html.escape(m.from_user.first_name)}!
-Принимаем ВЦ (WhatsApp).
-
 💰 Цена: <b>5$ / акк</b>
 ⏳ Холд: <b>Нет</b>
-⏱ Таймер: {QUEUE_TIMEOUT_MIN} мин
 
 🏦 <b>Также скупаем ВКонтакте!</b>
 Платим 3$ за аккаунт. Переходи: @AndronWorkVK_bot
@@ -269,12 +296,8 @@ async def cmd_start(m: types.Message, state: FSMContext):
 
 @dp.message(F.text == "💰 Условия и выплаты")
 async def cmd_info(m: types.Message):
-    # --- КНОПКА ССЫЛКА НА ВТОРОГО БОТА ---
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📂 Канал с выплатами", url=PAYOUT_CHANNEL)],
-        [InlineKeyboardButton(text="🏦 Сдать ВКонтакте (3$)", url="https://t.me/AndronWorkVK_bot")]
-    ])
-    await m.answer("📃 <b>Инфо ВЦ</b>\n\n💵 5$\n🚀 Выплаты после стопа\n\n💡 Есть ВК? Мы купим!", parse_mode="HTML", reply_markup=kb)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📂 Канал с выплатами", url=PAYOUT_CHANNEL)],[InlineKeyboardButton(text="🏦 Сдать ВКонтакте (3$)", url="https://t.me/AndronWorkVK_bot")]])
+    await m.answer("📃 <b>Инфо ВЦ</b>\n\n💵 5$\n🚀 Выплаты после стопа", parse_mode="HTML", reply_markup=kb)
 
 @dp.message(F.text == "✅ Я онлайн (Обновить таймер)")
 async def cmd_online(m: types.Message):
@@ -283,8 +306,7 @@ async def cmd_online(m: types.Message):
         q = get_queue_info(m.from_user.id)
         pos, total = get_position(q[1])
         await m.answer(f"🔄 <b>Обновлено!</b>\n📍 Очередь: {pos} / {total}", parse_mode="HTML")
-    else:
-        await m.answer("⚠️ Нет заявки.", reply_markup=user_menu)
+    else: await m.answer("⚠️ Нет заявки.", reply_markup=user_menu)
 
 @dp.message(F.text == "📍 Моя позиция")
 async def cmd_pos(m: types.Message):
@@ -292,8 +314,7 @@ async def cmd_pos(m: types.Message):
     if q:
         pos, total = get_position(q[1])
         await m.answer(f"📍 Место: <b>{pos} / {total}</b>", parse_mode="HTML")
-    else:
-        await m.answer("📭 Пусто.")
+    else: await m.answer("📭 Пусто.")
 
 @dp.message(F.text == "✨ Новая заявка")
 async def cmd_new(m: types.Message, state: FSMContext):
@@ -301,7 +322,10 @@ async def cmd_new(m: types.Message, state: FSMContext):
     if is_muted: return await m.answer(f"🤐 Мут: {text}")
     if not IS_WORK_ACTIVE: return await m.answer("🔴 Стоп ворк.")
     if m.from_user.id in active_chats: return await m.answer("⚠️ Закройте чат.")
-
+    
+    delete_admin_messages_for_user(m.from_user.id)
+    with get_conn() as conn: conn.execute("DELETE FROM queue WHERE user_id=?", (m.from_user.id,))
+    
     await state.set_state(UserStates.waiting_nums)
     await m.answer("📝 <b>Кидайте номера:</b>", parse_mode="HTML")
 
@@ -315,55 +339,79 @@ async def process_nums(m: types.Message, state: FSMContext):
     await state.clear()
 
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⚡️ ЗАБРАТЬ", callback_data=f"take_{m.from_user.id}")]])
-    notify = f"🔔 <b>ВЦ ЗАЯВКА</b>\n👤 {html.escape(m.from_user.full_name)}\n📄 Кол-во: {len(nums)}"
+    notify = f"🔔 <b>ВЦ ЗАЯВКА</b>\n👤 {html.escape(m.from_user.full_name)}\n📞 Номер:\n<code>{html.escape(nums[0])}</code>"
+    
     for adm in ADMIN_IDS:
-        try: await bot.send_message(adm, notify, reply_markup=kb, parse_mode="HTML")
+        try: 
+            msg = await bot.send_message(adm, notify, reply_markup=kb, parse_mode="HTML")
+            save_admin_message(m.from_user.id, adm, msg.message_id)
         except: pass
-
     await m.answer(f"✅ <b>Принято!</b>\n⏱ Жмите «Я онлайн» каждые {QUEUE_TIMEOUT_MIN} мин.", reply_markup=user_menu, parse_mode="HTML")
 
-# ==================== ЧАТ ====================
+# ==================== ЧАТ СИСТЕМА ====================
 @dp.callback_query(F.data.startswith("take_"))
 async def take_chat(c: types.CallbackQuery):
     uid = int(c.data.split("_")[1])
-    if uid in active_chats: return await c.answer("❌ Занято.")
+    if uid in active_chats: 
+        try: await c.message.delete()
+        except: pass
+        return await c.answer("❌ Уже занято.")
     
+    nums_data = ""
+    with get_conn() as conn:
+        row = conn.execute("SELECT numbers FROM queue WHERE user_id=?", (uid,)).fetchone()
+        if row: 
+            nums_data = row[0]
+            conn.execute("INSERT OR REPLACE INTO active_work (user_id, admin_id, numbers) VALUES (?, ?, ?)", (uid, c.from_user.id, nums_data))
+            conn.execute("DELETE FROM queue WHERE user_id=?", (uid,))
+
+    admin_msgs = get_admin_messages(uid)
+    for aid, mid in admin_msgs:
+        try: await bot.delete_message(chat_id=aid, message_id=mid)
+        except: pass
+    delete_admin_messages_for_user(uid)
+
     active_chats[uid] = c.from_user.id
     active_chats[c.from_user.id] = uid
-    
-    with get_conn() as conn: conn.execute("DELETE FROM queue WHERE user_id=?", (uid,))
     if uid in WARNED_USERS: WARNED_USERS.remove(uid)
 
-    await c.message.edit_reply_markup(reply_markup=None)
-    await c.message.answer(f"✅ Чат с {uid}", reply_markup=chat_admin_menu)
-    try: await bot.send_message(uid, "👨‍💻 <b>Админ тут.</b>", parse_mode="HTML", reply_markup=chat_user_menu)
+    await c.message.answer(f"✅ Взял {uid}", reply_markup=chat_admin_menu)
+    try: await bot.send_message(uid, "⏳ <b>Код запрошен!</b>\n⚡️ <b>У вас есть 3 минуты, чтобы прислать код!</b>\nНе задерживайте, иначе заявка слетит.", parse_mode="HTML", reply_markup=chat_user_menu)
     except: pass
 
 async def close_chat(admin_id, user_id, user_text, admin_text):
     if admin_id in active_chats: del active_chats[admin_id]
     if user_id in active_chats: del active_chats[user_id]
-    
+    with get_conn() as conn: conn.execute("DELETE FROM active_work WHERE user_id=?", (user_id,))
     try: await bot.send_message(user_id, user_text, parse_mode="HTML", reply_markup=user_menu)
     except: pass
     try: await bot.send_message(admin_id, admin_text, parse_mode="HTML", reply_markup=admin_panel_kb)
     except: pass
 
-@dp.message(F.text == "💰 Номер взят")
-async def admin_done(m: types.Message):
+@dp.message(F.text == "✅ ГУД (Оплата)")
+async def admin_success(m: types.Message):
     if m.from_user.id not in ADMIN_IDS: return
     user_id = active_chats.get(m.from_user.id)
     if not user_id: return await m.answer("Нет чата.")
-    
     await close_chat(m.from_user.id, user_id, 
-                     f"✅ <b>Принято!</b>\n💰 Ждите выплату: {PAYOUT_CHANNEL}", 
-                     "💸 Готово.")
+                     f"✅ <b>Аккаунт принят!</b>\n💰 Выплата будет в канале: {PAYOUT_CHANNEL}", 
+                     "✅ Успешно. Чат закрыт.")
 
+@dp.message(F.text == "❌ СЛЕТЕЛ")
+async def admin_fail(m: types.Message):
+    if m.from_user.id not in ADMIN_IDS: return
+    user_id = active_chats.get(m.from_user.id)
+    if not user_id: return await m.answer("Нет чата.")
+    await close_chat(m.from_user.id, user_id, 
+                     "❌ <b>Аккаунт не подошел / Слетел.</b>\nПопробуйте другой номер.", 
+                     "❌ Помечен как слетевший. Чат закрыт.")
+
+@dp.message(F.text == "🔒 Просто закрыть")
 @dp.message(F.text == "🔒 Закончить чат")
 async def stop_chat_any(m: types.Message):
     sender = m.from_user.id
     partner = active_chats.get(sender)
     if not partner: return await m.answer("Нет чата.", reply_markup=user_menu)
-
     if sender in ADMIN_IDS:
         await close_chat(sender, partner, "🔒 Админ закрыл чат.", "🔒 Чат закрыт.")
     else:
