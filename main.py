@@ -16,7 +16,7 @@ from aiogram.types import (
 )
 
 # ==================== КОНФИГУРАЦИЯ ====================
-TOKEN = "8449633779:AAGzj1Es07rBCxH_xcm_sG0F_tRjqAUWvVY"
+TOKEN = "8513008058:AAFMzDqlvqlhvqptKERIwoqZ2a85E4Msn1o"
 ADMIN_IDS = [8448843727, 8340396727, 8227071592]
 PAYOUT_CHANNEL = "https://t.me/+nTCkyUL-ycUxNGFi"
 
