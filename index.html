@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>DoDeals Guarantor</title>
+    <title>DoDeals App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
         :root {
             --bg-color: #000000;
-            --card-bg: #1C1C1E;
+            --card-bg: #1C1C1E; /* Темно-серый для карточек */
+            --input-bg: #1C1C1E; /* Фон инпутов */
             --text-color: #FFFFFF;
             --text-secondary: #8E8E93;
-            --accent-color: #D4FE45; /* Тот самый желто-лаймовый цвет */
+            --accent-color: #D4FE45; /* Кислотный лайм */
             --danger-color: #FF453A;
             --nav-height: 70px;
         }
@@ -23,6 +24,7 @@
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -34,91 +36,153 @@
             flex-direction: column;
         }
 
-        /* Верхняя навигация (Прогресс бар) */
-        .top-bar {
-            padding: 15px 20px;
+        /* --- Секция STORIES (Обучение) --- */
+        #stories-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 200;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
         }
 
-        .step-indicator {
+        .story-header {
+            padding: 10px 15px;
             display: flex;
             gap: 5px;
             width: 100%;
-            margin-top: 10px;
+            position: absolute;
+            top: 0;
+            z-index: 210;
         }
 
-        .step {
-            height: 3px;
-            background: rgba(255, 255, 255, 0.2);
+        .progress-bar {
+            height: 2px;
+            background: rgba(255, 255, 255, 0.3);
             flex: 1;
             border-radius: 2px;
+            overflow: hidden;
         }
 
-        .step.active {
-            background: #FFFFFF;
+        .progress-fill {
+            height: 100%;
+            background: #fff;
+            width: 0%;
+            transition: width 0.1s linear;
         }
 
-        /* Основной контейнер */
-        .main-container {
+        .progress-bar.completed .progress-fill { width: 100%; }
+        .progress-bar.active .progress-fill { width: 100%; } 
+
+        .story-slide {
+            flex: 1;
+            display: none; /* Скрыты по умолчанию */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+            height: 100%;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 70%);
+        }
+
+        .story-slide.active { display: flex; animation: fadeIn 0.4s ease; }
+
+        .story-icon {
+            font-size: 80px;
+            margin-bottom: 30px;
+            color: var(--accent-color);
+        }
+
+        .story-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+        .story-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            max-width: 320px;
+        }
+
+        .story-nav-area {
+            position: absolute;
+            top: 50px;
+            bottom: 80px;
+            width: 50%;
+            z-index: 205;
+        }
+        .left-area { left: 0; }
+        .right-area { right: 0; }
+
+        .story-btn-next {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 220;
+        }
+
+        /* --- Основное Приложение (APP) --- */
+        #app-container {
+            display: none; /* Скрыто пока идут сторис */
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+
+        .main-content {
             flex: 1;
             overflow-y: auto;
             padding: 20px;
-            padding-bottom: 90px; /* Отступ под нижнее меню */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            padding-bottom: 90px;
+        }
+
+        /* Страницы приложения */
+        .page { display: none; width: 100%; }
+        .page.active { display: block; animation: fadeIn 0.3s ease; }
+
+        /* Элементы формы (как на скриншоте 647edb) */
+        h1.page-title {
             text-align: center;
-        }
-
-        /* Страницы */
-        .page {
-            display: none; /* Скрываем все страницы по умолчанию */
-            width: 100%;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .page.active {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Элементы интерфейса */
-        .icon-placeholder {
-            font-size: 80px;
-            color: var(--text-secondary);
-            margin-bottom: 20px;
-            background: var(--card-bg);
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #333;
-        }
-
-        h1 {
+            margin-bottom: 30px;
             font-size: 24px;
             font-weight: 700;
-            margin-bottom: 10px;
         }
 
-        p {
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
             color: var(--text-secondary);
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 30px;
-            max-width: 300px;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .custom-input {
+            width: 100%;
+            background-color: var(--input-bg);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .custom-input:focus {
+            border-color: var(--accent-color);
         }
 
         .yellow-btn {
@@ -129,14 +193,54 @@
             padding: 16px;
             border-radius: 12px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            margin-bottom: 15px;
-            transition: transform 0.1s;
+            margin-top: 10px;
         }
 
-        .yellow-btn:active {
-            transform: scale(0.98);
+        .yellow-btn:active { transform: scale(0.98); }
+
+        /* Профиль */
+        .profile-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .avatar-circle {
+            width: 80px;
+            height: 80px;
+            background: #4FB0D6; /* Голубой цвет как на фото */
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+            margin-bottom: 15px;
+        }
+
+        .stats-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            padding: 0 20px;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            color: white;
+            font-size: 14px;
+        }
+        .stat-item i {
+            color: var(--accent-color);
+            width: 25px;
+            text-align: center;
+            margin-right: 10px;
         }
 
         /* Нижнее меню */
@@ -146,12 +250,12 @@
             left: 0;
             width: 100%;
             height: var(--nav-height);
-            background-color: rgba(28, 28, 30, 0.95);
-            backdrop-filter: blur(10px);
+            background: rgba(20, 20, 20, 0.95);
+            border-top: 1px solid #333;
             display: flex;
             justify-content: space-around;
             align-items: center;
-            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px; /* Для айфонов */
             z-index: 100;
         }
 
@@ -162,194 +266,243 @@
             color: var(--text-secondary);
             font-size: 10px;
             cursor: pointer;
-            transition: color 0.2s;
         }
 
         .nav-item i {
-            font-size: 20px;
-            margin-bottom: 4px;
-        }
-
-        .nav-item.active {
-            color: var(--accent-color);
-        }
-
-        /* Стили для формы сделки */
-        .input-group {
-            width: 100%;
-            text-align: left;
-            margin-bottom: 15px;
-        }
-        
-        .input-group label {
-            display: block;
-            color: var(--text-secondary);
+            font-size: 22px;
             margin-bottom: 5px;
-            font-size: 12px;
         }
 
-        .custom-input {
-            width: 100%;
-            background: var(--card-bg);
-            border: 1px solid #333;
-            color: white;
-            padding: 12px;
-            border-radius: 8px;
-            outline: none;
-        }
-        
-        .custom-input:focus {
-            border-color: var(--accent-color);
-        }
+        .nav-item.active { color: var(--accent-color); }
 
+        @keyframes fadeIn {
+            from { opacity: 0; } to { opacity: 1; }
+        }
     </style>
 </head>
 <body>
 
-    <div class="top-bar">
-        <div style="font-weight: bold;">DoDeals</div>
-        <i class="fas fa-ellipsis-v" style="color: var(--text-secondary);"></i>
+    <div id="stories-container">
+        <div class="story-header">
+            <div class="progress-bar" id="pb-0"><div class="progress-fill"></div></div>
+            <div class="progress-bar" id="pb-1"><div class="progress-fill"></div></div>
+            <div class="progress-bar" id="pb-2"><div class="progress-fill"></div></div>
+            <div class="progress-bar" id="pb-3"><div class="progress-fill"></div></div>
+            <div class="progress-bar" id="pb-4"><div class="progress-fill"></div></div>
+        </div>
+
+        <div class="story-nav-area left-area" onclick="prevStory()"></div>
+        <div class="story-nav-area right-area" onclick="nextStory()"></div>
+
+        <div class="story-slide active" id="slide-0">
+            <div class="story-icon"><i class="fas fa-shield-alt"></i></div>
+            <h2 class="story-title">Вас приветствует<br>гарант DoDeals!</h2>
+            <p class="story-text">Тут вы сможете быстро и безопасно провести любую сделку за USDT или TON. Всё прозрачно.</p>
+        </div>
+
+        <div class="story-slide" id="slide-1">
+            <div class="story-icon"><i class="fas fa-wallet"></i></div>
+            <h2 class="story-title">Подключение кошелька</h2>
+            <p class="story-text">Чтобы совершить сделку, нажмите в меню на иконку кошелька и подключите его через TON Connect.</p>
+        </div>
+
+        <div class="story-slide" id="slide-2">
+            <div class="story-icon"><i class="fas fa-handshake"></i></div>
+            <h2 class="story-title">Создание сделки</h2>
+            <p class="story-text">На главном экране нажмите кнопку создания сделки. Заполните поля и пригласите контрагента.</p>
+        </div>
+
+        <div class="story-slide" id="slide-3">
+            <div class="story-icon"><i class="far fa-comments"></i></div>
+            <h2 class="story-title">Обсуждение</h2>
+            <p class="story-text">Во встроенном чате обсудите детали. После согласования обе стороны принимают условия.</p>
+        </div>
+
+        <div class="story-slide" id="slide-4">
+            <div class="story-icon"><i class="fas fa-balance-scale"></i></div>
+            <h2 class="story-title">Завершение сделки</h2>
+            <p class="story-text">Когда условия выполнены, завершите сделку, и средства поступят продавцу автоматически.</p>
+        </div>
+
+        <div class="story-btn-next" id="story-action-btn" onclick="nextStory()">Дальше</div>
     </div>
-    
-    <div style="padding: 0 20px;">
-        <div class="step-indicator">
-            <div class="step active"></div>
-            <div class="step active"></div>
-            <div class="step"></div>
-            <div class="step"></div>
-            <div class="step"></div>
-        </div>
-    </div>
 
-    <div class="main-container">
 
-        <div id="page-deals" class="page active">
-            <div class="icon-placeholder">
-                <i class="fas fa-handshake" style="color: var(--accent-color);"></i>
-            </div>
-            <h1>Безопасная сделка</h1>
-            <p>Создайте сделку, пригласите гаранта или второго участника. Средства будут заморожены до выполнения условий.</p>
+    <div id="app-container">
+        
+        <div class="main-content">
             
-            <button class="yellow-btn" onclick="openCreateDeal()">Создать сделку</button>
-            <p style="font-size: 12px; margin-top: -10px;">Комиссия сервиса 2%</p>
-        </div>
-
-        <div id="page-wallet" class="page">
-            <div class="icon-placeholder">
-                <i class="fas fa-wallet" style="color: white;"></i>
-            </div>
-            <h1>Ваш Кошелек</h1>
-            <p>Подключите TON Space или другой кошелек для проведения операций.</p>
-            
-            <div class="input-group">
-                <label>Баланс</label>
-                <input type="text" class="custom-input" value="0.00 TON" readonly>
-            </div>
-
-            <button class="yellow-btn">Подключить TON Connect</button>
-        </div>
-
-        <div id="page-create" class="page">
-            <h1>Параметры сделки</h1>
-            <div class="input-group">
-                <label>Сумма сделки (USDT/TON)</label>
-                <input type="number" class="custom-input" placeholder="Введите сумму">
-            </div>
-            <div class="input-group">
-                <label>Условия (Описание)</label>
-                <input type="text" class="custom-input" placeholder="Например: Покупка канала">
-            </div>
-            <div class="input-group">
-                <label>Юзернейм партнера</label>
-                <input type="text" class="custom-input" placeholder="@username">
-            </div>
-            <button class="yellow-btn">Перейти к оплате</button>
-        </div>
-
-        <div id="page-profile" class="page">
-            <div class="icon-placeholder" style="width: 80px; height: 80px;">
-                <i class="fas fa-ghost"></i>
-            </div>
-            <h2 id="username-display">User</h2>
-            <p>Рейтинг: 5.0 ★</p>
-            
-            <div style="width: 100%; text-align: left; margin-top: 20px;">
-                <div style="padding: 15px; background: var(--card-bg); border-radius: 10px; margin-bottom: 10px;">
-                    <i class="fas fa-history" style="margin-right: 10px;"></i> История сделок
+            <div id="page-profile" class="page active">
+                <div class="profile-header">
+                    <div class="avatar-circle">
+                        <i class="fas fa-ghost"></i>
+                    </div>
+                    <h2 id="username-display">User</h2>
+                    <div style="color: #FFD700; margin-top: 5px;">★ 0</div>
                 </div>
-                <div style="padding: 15px; background: var(--card-bg); border-radius: 10px; margin-bottom: 10px;">
-                    <i class="fas fa-life-ring" style="margin-right: 10px;"></i> Поддержка
+
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <i class="far fa-calendar-alt"></i> 0 месяцев использует
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-check-circle"></i> 0 сделок завершено
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-balance-scale"></i> 0 арбитражей
+                    </div>
+                </div>
+
+                <div style="padding: 20px; margin-top: 20px;">
+                    <button class="yellow-btn" onclick="switchTab('create')">Создать сделку</button>
                 </div>
             </div>
+
+            <div id="page-create" class="page">
+                <h1 class="page-title">Параметры сделки</h1>
+                
+                <div class="input-group">
+                    <label>Сумма сделки (USDT/TON)</label>
+                    <input type="number" class="custom-input" placeholder="0">
+                </div>
+
+                <div class="input-group">
+                    <label>Условия (Описание)</label>
+                    <input type="text" class="custom-input" placeholder="Введите условия сделки">
+                </div>
+
+                <div class="input-group">
+                    <label>Юзернейм партнера</label>
+                    <input type="text" class="custom-input" placeholder="@username">
+                </div>
+
+                <button class="yellow-btn">Перейти к оплате</button>
+            </div>
+
+            <div id="page-wallet" class="page">
+                <div style="text-align: center; margin-top: 50px;">
+                    <i class="fas fa-wallet" style="font-size: 60px; color: #333; margin-bottom: 20px;"></i>
+                    <h2>Кошелек</h2>
+                    <p style="color: #888; margin: 15px 0;">Подключите кошелек для работы</p>
+                    <button class="yellow-btn" style="width: 200px;">Connect Wallet</button>
+                </div>
+            </div>
+
+            <div id="page-faq" class="page">
+                <h1 class="page-title">FAQ</h1>
+                <p style="text-align: center; color: #888;">Раздел вопросов и ответов.</p>
+            </div>
+
         </div>
 
-    </div>
-
-    <div class="bottom-nav">
-        <div class="nav-item" onclick="switchTab('profile', this)">
-            <i class="far fa-user"></i>
-            <span>Профиль</span>
-        </div>
-        <div class="nav-item active" onclick="switchTab('deals', this)">
-            <i class="fas fa-handshake"></i>
-            <span>Сделки</span>
-        </div>
-        <div class="nav-item" onclick="switchTab('wallet', this)">
-            <i class="fas fa-wallet"></i>
-            <span>Кошелек</span>
-        </div>
-        <div class="nav-item" onclick="switchTab('faq', this)">
-            <i class="far fa-question-circle"></i>
-            <span>FAQ</span>
+        <div class="bottom-nav">
+            <div class="nav-item active" onclick="switchTab('profile', this)">
+                <i class="far fa-user"></i>
+                <span>Профиль</span>
+            </div>
+            <div class="nav-item" onclick="switchTab('create', this)">
+                <i class="fas fa-handshake"></i>
+                <span>Сделки</span>
+            </div>
+            <div class="nav-item" onclick="switchTab('wallet', this)">
+                <i class="fas fa-wallet"></i>
+                <span>Кошелек</span>
+            </div>
+            <div class="nav-item" onclick="switchTab('faq', this)">
+                <i class="far fa-question-circle"></i>
+                <span>FAQ</span>
+            </div>
         </div>
     </div>
 
     <script>
-        // Инициализация Telegram WebApp
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Раскрыть на всю высоту
+        tg.expand();
 
-        // Устанавливаем цвета темы телеграм (если нужно подстраиваться, но мы жестко задали черный)
-        // tg.setHeaderColor('#000000'); 
-        
-        // Получаем имя пользователя
+        // --- ЛОГИКА STORIES ---
+        let currentStory = 0;
+        const totalStories = 5;
+
+        function updateStories() {
+            // Скрыть все слайды
+            for(let i=0; i<totalStories; i++) {
+                document.getElementById('slide-' + i).classList.remove('active');
+                
+                // Обновляем прогресс бары
+                let pb = document.getElementById('pb-' + i);
+                if(i < currentStory) {
+                    pb.classList.add('completed');
+                    pb.classList.remove('active');
+                } else if (i === currentStory) {
+                    pb.classList.remove('completed');
+                    pb.classList.add('active');
+                } else {
+                    pb.classList.remove('completed');
+                    pb.classList.remove('active');
+                }
+            }
+
+            // Показать текущий
+            document.getElementById('slide-' + currentStory).classList.add('active');
+
+            // Кнопка внизу
+            const btn = document.getElementById('story-action-btn');
+            if (currentStory === totalStories - 1) {
+                btn.innerText = "Начать";
+                btn.style.color = "#fff"; // Сделать белой чтобы выделялась
+            } else {
+                btn.innerText = "Дальше";
+                btn.style.color = "var(--accent-color)";
+            }
+        }
+
+        function nextStory() {
+            if (currentStory < totalStories - 1) {
+                currentStory++;
+                updateStories();
+            } else {
+                finishStories();
+            }
+        }
+
+        function prevStory() {
+            if (currentStory > 0) {
+                currentStory--;
+                updateStories();
+            }
+        }
+
+        function finishStories() {
+            // Скрываем контейнер сторис, показываем приложение
+            document.getElementById('stories-container').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+        }
+
+        // Запуск первой истории
+        updateStories();
+
+
+        // --- ЛОГИКА ПРИЛОЖЕНИЯ ---
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            document.getElementById('username-display').innerText = tg.initDataUnsafe.user.first_name;
+            document.getElementById('username-display').innerText = tg.initDataUnsafe.user.username || tg.initDataUnsafe.user.first_name;
         }
 
-        // Логика переключения вкладок
-        function switchTab(tabName, element) {
-            // Убираем активный класс у всех кнопок меню
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            // Добавляем нажатой
-            if(element) element.classList.add('active');
-
-            // Скрываем все страницы
-            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-
-            // Показываем нужную (если это FAQ, пока просто алерт)
-            if (tabName === 'faq') {
-                alert('Раздел FAQ в разработке');
-                // Возвращаем активность на сделку, чтоб не ломать UI
-                document.getElementById('page-deals').classList.add('active');
-                return;
+        function switchTab(tabName, navElement) {
+            // Смена активной кнопки меню
+            if(navElement) {
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                navElement.classList.add('active');
+            } else {
+                // Если переключили программно (из кнопки "Создать сделку")
+                document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+                // Находим кнопку, соответствующую табу (упрощенно)
+                if(tabName === 'create') document.querySelectorAll('.nav-item')[1].classList.add('active');
             }
 
-            const targetPage = document.getElementById('page-' + tabName);
-            if (targetPage) {
-                targetPage.classList.add('active');
-            }
-        }
-
-        // Кнопка "Создать сделку" внутри страницы
-        function openCreateDeal() {
+            // Смена страницы
             document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-            document.getElementById('page-create').classList.add('active');
+            document.getElementById('page-' + tabName).classList.add('active');
         }
-
-        // Главная кнопка WebApp (по желанию можно использовать нативную кнопку)
-        // tg.MainButton.setText("Подтвердить");
-        // tg.MainButton.show();
     </script>
 </body>
 </html>
