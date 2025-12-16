@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DoDeals Guarantor</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-color: #000000;
+            --card-bg: #1C1C1E;
+            --text-color: #FFFFFF;
+            --text-secondary: #8E8E93;
+            --accent-color: #D4FE45; /* Тот самый желто-лаймовый цвет */
+            --danger-color: #FF453A;
+            --nav-height: 70px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Верхняя навигация (Прогресс бар) */
+        .top-bar {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .step-indicator {
+            display: flex;
+            gap: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .step {
+            height: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            flex: 1;
+            border-radius: 2px;
+        }
+
+        .step.active {
+            background: #FFFFFF;
+        }
+
+        /* Основной контейнер */
+        .main-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: 90px; /* Отступ под нижнее меню */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Страницы */
+        .page {
+            display: none; /* Скрываем все страницы по умолчанию */
+            width: 100%;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .page.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Элементы интерфейса */
+        .icon-placeholder {
+            font-size: 80px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #333;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 30px;
+            max-width: 300px;
+        }
+
+        .yellow-btn {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 15px;
+            transition: transform 0.1s;
+        }
+
+        .yellow-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Нижнее меню */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: var(--nav-height);
+            background-color: rgba(28, 28, 30, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            z-index: 100;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 10px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-item i {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+
+        .nav-item.active {
+            color: var(--accent-color);
+        }
+
+        /* Стили для формы сделки */
+        .input-group {
+            width: 100%;
+            text-align: left;
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .custom-input {
+            width: 100%;
+            background: var(--card-bg);
+            border: 1px solid #333;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            outline: none;
+        }
+        
+        .custom-input:focus {
+            border-color: var(--accent-color);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div style="font-weight: bold;">DoDeals</div>
+        <i class="fas fa-ellipsis-v" style="color: var(--text-secondary);"></i>
+    </div>
+    
+    <div style="padding: 0 20px;">
+        <div class="step-indicator">
+            <div class="step active"></div>
+            <div class="step active"></div>
+            <div class="step"></div>
+            <div class="step"></div>
+            <div class="step"></div>
+        </div>
+    </div>
+
+    <div class="main-container">
+
+        <div id="page-deals" class="page active">
+            <div class="icon-placeholder">
+                <i class="fas fa-handshake" style="color: var(--accent-color);"></i>
+            </div>
+            <h1>Безопасная сделка</h1>
+            <p>Создайте сделку, пригласите гаранта или второго участника. Средства будут заморожены до выполнения условий.</p>
+            
+            <button class="yellow-btn" onclick="openCreateDeal()">Создать сделку</button>
+            <p style="font-size: 12px; margin-top: -10px;">Комиссия сервиса 2%</p>
+        </div>
+
+        <div id="page-wallet" class="page">
+            <div class="icon-placeholder">
+                <i class="fas fa-wallet" style="color: white;"></i>
+            </div>
+            <h1>Ваш Кошелек</h1>
+            <p>Подключите TON Space или другой кошелек для проведения операций.</p>
+            
+            <div class="input-group">
+                <label>Баланс</label>
+                <input type="text" class="custom-input" value="0.00 TON" readonly>
+            </div>
+
+            <button class="yellow-btn">Подключить TON Connect</button>
+        </div>
+
+        <div id="page-create" class="page">
+            <h1>Параметры сделки</h1>
+            <div class="input-group">
+                <label>Сумма сделки (USDT/TON)</label>
+                <input type="number" class="custom-input" placeholder="Введите сумму">
+            </div>
+            <div class="input-group">
+                <label>Условия (Описание)</label>
+                <input type="text" class="custom-input" placeholder="Например: Покупка канала">
+            </div>
+            <div class="input-group">
+                <label>Юзернейм партнера</label>
+                <input type="text" class="custom-input" placeholder="@username">
+            </div>
+            <button class="yellow-btn">Перейти к оплате</button>
+        </div>
+
+        <div id="page-profile" class="page">
+            <div class="icon-placeholder" style="width: 80px; height: 80px;">
+                <i class="fas fa-ghost"></i>
+            </div>
+            <h2 id="username-display">User</h2>
+            <p>Рейтинг: 5.0 ★</p>
+            
+            <div style="width: 100%; text-align: left; margin-top: 20px;">
+                <div style="padding: 15px; background: var(--card-bg); border-radius: 10px; margin-bottom: 10px;">
+                    <i class="fas fa-history" style="margin-right: 10px;"></i> История сделок
+                </div>
+                <div style="padding: 15px; background: var(--card-bg); border-radius: 10px; margin-bottom: 10px;">
+                    <i class="fas fa-life-ring" style="margin-right: 10px;"></i> Поддержка
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item" onclick="switchTab('profile', this)">
+            <i class="far fa-user"></i>
+            <span>Профиль</span>
+        </div>
+        <div class="nav-item active" onclick="switchTab('deals', this)">
+            <i class="fas fa-handshake"></i>
+            <span>Сделки</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('wallet', this)">
+            <i class="fas fa-wallet"></i>
+            <span>Кошелек</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('faq', this)">
+            <i class="far fa-question-circle"></i>
+            <span>FAQ</span>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Раскрыть на всю высоту
+
+        // Устанавливаем цвета темы телеграм (если нужно подстраиваться, но мы жестко задали черный)
+        // tg.setHeaderColor('#000000'); 
+        
+        // Получаем имя пользователя
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            document.getElementById('username-display').innerText = tg.initDataUnsafe.user.first_name;
+        }
+
+        // Логика переключения вкладок
+        function switchTab(tabName, element) {
+            // Убираем активный класс у всех кнопок меню
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            // Добавляем нажатой
+            if(element) element.classList.add('active');
+
+            // Скрываем все страницы
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+
+            // Показываем нужную (если это FAQ, пока просто алерт)
+            if (tabName === 'faq') {
+                alert('Раздел FAQ в разработке');
+                // Возвращаем активность на сделку, чтоб не ломать UI
+                document.getElementById('page-deals').classList.add('active');
+                return;
+            }
+
+            const targetPage = document.getElementById('page-' + tabName);
+            if (targetPage) {
+                targetPage.classList.add('active');
+            }
+        }
+
+        // Кнопка "Создать сделку" внутри страницы
+        function openCreateDeal() {
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+            document.getElementById('page-create').classList.add('active');
+        }
+
+        // Главная кнопка WebApp (по желанию можно использовать нативную кнопку)
+        // tg.MainButton.setText("Подтвердить");
+        // tg.MainButton.show();
+    </script>
+</body>
+</html>
