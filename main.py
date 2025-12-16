@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo
 
 # Вставьте сюда токен от @BotFather
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = "7974095618:AAE-hJZamXJ4m3w5pm2IQT2D6kw7A-ZwyWM"
 
 dp = Dispatcher()
 
