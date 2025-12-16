@@ -5,11 +5,11 @@ from aiogram.filters import Command
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 
 # Вставь сюда свой токен от @BotFather
-API_TOKEN = 'YOUR_BOT_TOKEN_HERE'
+API_TOKEN = '7974095618:AAE-hJZamXJ4m3w5pm2IQT2D6kw7A-ZwyWM'
 
 # Ссылка на твой index.html (обязательно HTTPS!)
 # Например: 'https://username.github.io/my-guarantor-bot/'
-WEBAPP_URL = 'https://YOUR_WEBSITE_URL.com' 
+WEBAPP_URL = 'https://lol228355.github.io/vc-bot/' 
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
