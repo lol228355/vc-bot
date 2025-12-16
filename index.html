@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Создание сделки</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1E1E22;
+            --text-primary: #FFFFFF;
+            --text-secondary: #8E8E93;
+            --accent-color: #D4F658; /* Тот самый лаймовый цвет */
+            --accent-text: #000000;
+            --input-bg: #2C2C30;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+
+        p.subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        label {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background-color: var(--input-bg);
+            border: 1px solid transparent;
+            border-radius: 12px;
+            padding: 14px;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            transition: 0.2s;
+            margin-bottom: 15px;
+        }
+
+        input:focus, textarea:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* Стили для выбора крипты */
+        .crypto-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .crypto-option {
+            flex: 1;
+            background: var(--input-bg);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            border: 1px solid transparent;
+            font-weight: 600;
+        }
+
+        .crypto-option.active {
+            background: rgba(212, 246, 88, 0.1);
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .main-btn {
+            background-color: var(--accent-color);
+            color: var(--accent-text);
+            border: none;
+            width: 100%;
+            padding: 16px;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: auto; /* Прижимает кнопку к низу */
+            transition: transform 0.1s;
+        }
+
+        .main-btn:active {
+            transform: scale(0.98);
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .info-value {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Новая сделка</h1>
+    <p class="subtitle">Заполните условия для безопасного обмена</p>
+
+    <div class="card">
+        <label>Я хочу:</label>
+        <div class="crypto-selector">
+            <div class="crypto-option active" onclick="selectRole(this, 'buy')">Купить</div>
+            <div class="crypto-option" onclick="selectRole(this, 'sell')">Продать</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <label>Валюта сделки</label>
+        <div class="crypto-selector">
+            <div class="crypto-option active" onclick="selectCrypto(this, 'USDT')">USDT</div>
+            <div class="crypto-option" onclick="selectCrypto(this, 'TON')">TON</div>
+        </div>
+
+        <label>Сумма сделки</label>
+        <input type="number" placeholder="0.00" inputmode="decimal">
+        
+        <div class="info-row">
+            <span style="color: var(--text-secondary);">Комиссия сервиса (2%):</span>
+            <span class="info-value">0 USDT</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <label>Предмет сделки</label>
+        <textarea rows="3" placeholder="Опишите товар или услугу (например: Телеграм канал @example)"></textarea>
+    </div>
+
+    <button class="main-btn" onclick="createDeal()">Создать сделку</button>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Раскрыть на весь экран
+
+        // Логика переключения кнопок
+        function selectCrypto(el, crypto) {
+            document.querySelectorAll('.crypto-selector .crypto-option').forEach(e => {
+                if(e.textContent === crypto || (e.textContent !== 'USDT' && e.textContent !== 'TON')) {
+                   // Простая логика для примера, в реальности лучше по ID
+                }
+            });
+            // Визуальное переключение (нужно дописать логику классов)
+            el.parentElement.querySelectorAll('.crypto-option').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function selectRole(el, role) {
+            el.parentElement.querySelectorAll('.crypto-option').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function createDeal() {
+            // Здесь данные отправляются обратно боту
+            const data = {
+                action: "create_deal",
+                amount: 100,
+                currency: "USDT"
+            };
+            tg.sendData(JSON.stringify(data)); 
+        }
+    </script>
+</body>
+</html>
