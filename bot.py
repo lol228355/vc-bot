@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 
 # Токен от @BotFather
-API_TOKEN = 'ВАШ_ТОКЕН'
+API_TOKEN = '7974095618:AAE-hJZamXJ4m3w5pm2IQT2D6kw7A-ZwyWM'
 # Ссылка на файл index.html (должна быть HTTPS, например GitHub Pages)
 WEBAPP_URL = 'https://lol228355.github.io/vc-bot/'
 
