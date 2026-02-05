@@ -4,11 +4,11 @@ from telebot import types
 
 # --- ⚙️ НАСТРОЙКИ (ЗАПОЛНИ ЭТО) ---
 BOT_TOKEN = "8094711584:AAEb3DDLCgeLAnTPJWks78GNkLdSjntL3-o"
-CRYPTO_PAY_TOKEN = "523740:AAq1IVJp1MnbToje9z2iJdzBTyv0c8CCXsY"
+CRYPTO_PAY_TOKEN = "514479:AAb64Swo8pexGV3iVkgI4MqdlYYsg22BhOZ"
 
 # Список ID администраторов, которым разрешено пользоваться ботом
 # Свой ID можно узнать у бота @userinfobot
-ADMIN_IDS = [8576762452, 8119723042] 
+ADMIN_IDS = [8379364188, 8119723042] 
 
 # --- 🛠 НАСТРОЙКА API ---
 CRYPTO_API_URL = "https://pay.crypt.bot/api/"
