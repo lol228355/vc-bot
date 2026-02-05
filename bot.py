@@ -3,7 +3,7 @@ import telebot
 from telebot import types
 
 # --- ⚙️ НАСТРОЙКИ (ЗАПОЛНИ ЭТО) ---
-BOT_TOKEN = "8536964721:AAFG0my1nunosT9DVj_kDNmGJeqGGtl34f4"
+BOT_TOKEN = "8094711584:AAEb3DDLCgeLAnTPJWks78GNkLdSjntL3-o"
 CRYPTO_PAY_TOKEN = "523740:AAq1IVJp1MnbToje9z2iJdzBTyv0c8CCXsY"
 
 # Список ID администраторов, которым разрешено пользоваться ботом
