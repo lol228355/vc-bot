@@ -11,7 +11,7 @@ from aiogram.types import (Message, InlineKeyboardMarkup, InlineKeyboardButton,
                            CallbackQuery, ReplyKeyboardRemove)
 
 # --- КОНФИГУРАЦИЯ ---
-BOT_TOKEN = "8530587228:AAHZyvz5zs1MwipU7lMJiLDc20zGNVZCkAw"
+BOT_TOKEN = "8530587228:AAFCmNgjzl-6SkL1D-l5ixG6_Bf8kl7oVZA"
 ADMIN_IDS = [8663017094, 8119723042]
 SHOP_NAME = "𝗠𝗢𝗜 𝗦𝗵𝗢𝗣"
 
