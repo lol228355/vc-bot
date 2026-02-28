@@ -22,7 +22,6 @@ dp = Dispatcher(storage=MemoryStorage())
 def init_db():
     conn = sqlite3.connect("shop.db")
     cur = conn.cursor()
-    # Таблица пользователей (с датой регистрации)
     cur.execute("""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY, 
         username TEXT, 
@@ -30,7 +29,6 @@ def init_db():
         balance REAL DEFAULT 0.0,
         purchases INTEGER DEFAULT 0
     )""")
-    # Таблица категорий и товаров
     cur.execute("CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)")
     cur.execute("""CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER, name TEXT, 
@@ -39,7 +37,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Регистрация пользователя
 def get_or_create_user(user_id, username):
     conn = sqlite3.connect("shop.db")
     cur = conn.cursor()
@@ -55,26 +52,25 @@ def get_or_create_user(user_id, username):
     conn.close()
     return user
 
-# --- СОСТОЯНИЯ ---
-class AddCategory(StatesGroup): name = State()
-class AddProduct(StatesGroup): cat_id = State(); name = State(); description = State(); price_stars = State(); price_usd = State()
-
 # --- КЛАВИАТУРЫ ---
-def get_main_kb(user_id):
+
+def get_profile_kb(user_id):
     kb = [
-        [InlineKeyboardButton(text="👤 Профиль", callback_data="to_main"), 
-         InlineKeyboardButton(text="🛒 Каталог", callback_data="open_catalog")],
-        [InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/MOl_t2")]
+        [InlineKeyboardButton(text="🛒 КАТАЛОГ", callback_data="open_catalog")],
+        [InlineKeyboardButton(text="💰 Пополнить", callback_data="deposit"),
+         InlineKeyboardButton(text="🎟 Промокод", callback_data="promo")],
+        [InlineKeyboardButton(text="ℹ️ Информация", callback_data="info"),
+         InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/MOl_t2")]
     ]
     if user_id in ADMIN_IDS:
         kb.append([InlineKeyboardButton(text="⚙️ АДМИН-ПАНЕЛЬ", callback_data="admin_main")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-# --- ГЛАВНЫЙ ХЭНДЛЕР (/start) ---
+# --- ОСНОВНЫЕ ХЭНДЛЕРЫ ---
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     user_data = get_or_create_user(message.from_user.id, message.from_user.first_name)
-    
     profile_text = (
         f"╔═══════════════════╗\n"
         f"║      👤 ВАШ ПРОФИЛЬ      \n"
@@ -87,11 +83,10 @@ async def cmd_start(message: Message):
         f"🛍 Покупок: {user_data[4]}\n"
         f"━━━━━━━━━━━━━━━━━━━"
     )
-    
-    await message.answer(profile_text, parse_mode="Markdown", reply_markup=get_main_kb(message.from_user.id))
+    await message.answer(profile_text, parse_mode="Markdown", reply_markup=get_profile_kb(message.from_user.id))
 
 @dp.callback_query(F.data == "to_main")
-async def back_to_main(callback: CallbackQuery):
+async def back_to_profile(callback: CallbackQuery):
     user_data = get_or_create_user(callback.from_user.id, callback.from_user.first_name)
     profile_text = (
         f"╔═══════════════════╗\n"
@@ -105,19 +100,57 @@ async def back_to_main(callback: CallbackQuery):
         f"🛍 Покупок: {user_data[4]}\n"
         f"━━━━━━━━━━━━━━━━━━━"
     )
-    await callback.message.edit_text(profile_text, parse_mode="Markdown", reply_markup=get_main_kb(callback.from_user.id))
+    await callback.message.edit_text(profile_text, parse_mode="Markdown", reply_markup=get_profile_kb(callback.from_user.id))
 
-# --- КАТАЛОГ И АДМИНКА ---
+@dp.callback_query(F.data == "info")
+async def show_info(callback: CallbackQuery):
+    info_text = (
+        f"ℹ️ **ИНФОРМАЦИЯ {SHOP_NAME}**\n"
+        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        "• **О нас:** Лучший шоп скриптов и аккаунтов.\n"
+        "• **Гарантия:** 24 часа на проверку любого товара.\n"
+        "• **Пополнение:** Автоматическое через CryptoBot или Stars.\n\n"
+        "📍 Мы работаем для вас!"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")]])
+    await callback.message.edit_text(info_text, parse_mode="Markdown", reply_markup=kb)
+
+# --- КАТАЛОГ ---
+
 @dp.callback_query(F.data == "open_catalog")
 async def open_catalog(callback: CallbackQuery):
     conn = sqlite3.connect("shop.db"); cur = conn.cursor()
     cur.execute("SELECT * FROM categories"); cats = cur.fetchall(); conn.close()
     if not cats:
-        await callback.answer("❌ Магазин пуст!", show_alert=True); return
+        await callback.answer("❌ В магазине еще нет категорий!", show_alert=True); return
     
     kb = [[InlineKeyboardButton(text=f"📂 {c[1]}", callback_data=f"usercat_{c[0]}")] for c in cats]
     kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")])
     await callback.message.edit_text(f"📁 **{SHOP_NAME} | КАТЕГОРИИ:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
+
+@dp.callback_query(F.data.startswith("usercat_"))
+async def list_prods(callback: CallbackQuery):
+    cat_id = callback.data.split("_")[1]
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT id, name FROM products WHERE cat_id=?", (cat_id,)); prods = cur.fetchall(); conn.close()
+    if not prods:
+        await callback.answer("В этой категории пусто", show_alert=True); return
+    kb = [[InlineKeyboardButton(text=f"🔹 {p[1]}", callback_data=f"view_{p[0]}")] for p in prods]
+    kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="open_catalog")])
+    await callback.message.edit_text("📦 Выберите товар:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query(F.data.startswith("view_"))
+async def view_item(callback: CallbackQuery):
+    p_id = callback.data.split("_")[1]
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT * FROM products WHERE id=?", (p_id,)); p = cur.fetchone(); conn.close()
+    text = (f"💎 **{p[2]}**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n{p[3]}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+            f"💵 Цена: **${p[5]}** или **⭐️ {p[4]}**")
+    kb = [[InlineKeyboardButton(text="💳 Купить", callback_data=f"buy_{p[0]}")],
+          [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"usercat_{p[1]}")]]
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+# --- АДМИН-ПАНЕЛЬ ---
 
 @dp.callback_query(F.data == "admin_main")
 async def admin_main(callback: CallbackQuery):
@@ -125,14 +158,16 @@ async def admin_main(callback: CallbackQuery):
         [InlineKeyboardButton(text="📁 Создать категорию", callback_data="add_cat")],
         [InlineKeyboardButton(text="➕ Добавить товар", callback_data="add_prod")],
         [InlineKeyboardButton(text="🗑 Удалить категорию", callback_data="del_cat_list")],
-        [InlineKeyboardButton(text="⬅️ Меню", callback_data="to_main")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")]
     ]
     await callback.message.edit_text("🛠 **ПАНЕЛЬ АДМИНИСТРАТОРА**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
 
-# --- ДОБАВЛЕНИЕ КАТЕГОРИИ ---
+class AddCategory(StatesGroup): name = State()
+class AddProduct(StatesGroup): cat_id = State(); name = State(); description = State(); price_stars = State(); price_usd = State()
+
 @dp.callback_query(F.data == "add_cat")
 async def add_cat_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer("⌨️ Введите название для **новой категории**:")
+    await callback.message.answer("⌨️ Введите название для новой категории:")
     await state.set_state(AddCategory.name)
 
 @dp.message(StateFilter(AddCategory.name))
@@ -142,7 +177,6 @@ async def add_cat_finish(msg: Message, state: FSMContext):
     await msg.answer(f"✅ Категория **{msg.text}** создана!")
     await state.clear()
 
-# --- ДОБАВЛЕНИЕ ТОВАРА ---
 @dp.callback_query(F.data == "add_prod")
 async def add_prod_start(callback: CallbackQuery, state: FSMContext):
     conn = sqlite3.connect("shop.db"); cur = conn.cursor()
@@ -174,7 +208,7 @@ async def add_prod_desc(msg: Message, state: FSMContext):
 @dp.message(StateFilter(AddProduct.price_stars))
 async def add_prod_stars(msg: Message, state: FSMContext):
     await state.update_data(price_stars=int(msg.text))
-    await msg.answer("💵 Цена в **USD**:")
+    await msg.answer("💵 Цена в **USD** (напр. 1.5):")
     await state.set_state(AddProduct.price_usd)
 
 @dp.message(StateFilter(AddProduct.price_usd))
@@ -184,12 +218,32 @@ async def add_prod_finish(msg: Message, state: FSMContext):
     cur.execute("INSERT INTO products (cat_id, name, description, price_stars, price_usd) VALUES (?, ?, ?, ?, ?)",
                 (d['cat_id'], d['name'], d['description'], d['price_stars'], float(msg.text.replace(",","."))))
     conn.commit(); conn.close()
-    await msg.answer("✅ Товар добавлен!")
+    await msg.answer("✅ Товар успешно добавлен!")
     await state.clear()
 
+@dp.callback_query(F.data == "del_cat_list")
+async def del_cat_list(callback: CallbackQuery):
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT * FROM categories"); cats = cur.fetchall(); conn.close()
+    kb = [[InlineKeyboardButton(text=f"🗑 {c[1]}", callback_data=f"delcat_{c[0]}")] for c in cats]
+    kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+    await callback.message.edit_text("Выберите категорию для удаления:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query(F.data.startswith("delcat_"))
+async def del_cat_exec(callback: CallbackQuery):
+    cid = callback.data.split("_")[1]
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("DELETE FROM categories WHERE id=?", (cid,))
+    cur.execute("DELETE FROM products WHERE cat_id=?", (cid,))
+    conn.commit(); conn.close()
+    await callback.answer("Удалено"); await del_cat_list(callback)
+
+# --- ЗАПУСК ---
 async def main():
     init_db()
+    print(f"--- Бот {SHOP_NAME} запущен ---")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
