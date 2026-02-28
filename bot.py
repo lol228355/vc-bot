@@ -5,19 +5,20 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.types import Message, LabeledPrice, PreCheckoutQuery, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, LabeledPrice, PreCheckoutQuery, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiocryptopay import AioCryptoPay, Networks
 
 # --- КОНФИГУРАЦИЯ ---
 BOT_TOKEN = "8530587228:AAFLCfG3W9GVInOtA8nqZG-o3f9StyGc9wI"
-CRYPTO_BOT_TOKEN = "ВСТАВЬ_ТОКЕН_ИЗ_CRYPTO_BOT" # Получи в @CryptoBot -> Crypto Pay
+CRYPTO_BOT_TOKEN = "ВСТАВЬ_ТОКЕН_ИЗ_CRYPTO_BOT" 
 ADMIN_IDS = [8663017094, 8119723042]
+SHOP_NAME = "𝗠𝗢𝗜 𝗦𝗵𝗢𝗣"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 crypto = AioCryptoPay(token=CRYPTO_BOT_TOKEN, network=Networks.MAIN_NET)
 
-# --- РАБОТА С БАЗОЙ ДАННЫХ ---
+# --- БАЗА ДАННЫХ ---
 def init_db():
     conn = sqlite3.connect("shop.db")
     cur = conn.cursor()
@@ -32,162 +33,182 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- СОСТОЯНИЯ (FSM) ДЛЯ АДМИНКИ ---
 class AddProduct(StatesGroup):
-    category = State()
-    name = State()
-    description = State()
-    price_stars = State()
-    price_usd = State()
+    category = State(); name = State(); description = State(); price_stars = State(); price_usd = State()
 
-CATEGORIES = ["БОТЫ", "МАНУАЛЫ", "ПОДПИСИ", "СИМКИ", "УСЛУГИ", "АККАУНТЫ ВК", "АККАУНТЫ ТГ", "АККАУНТЫ ВБ", "ОЗОН"]
+CATEGORIES = {
+    "🤖 БОТЫ": "БОТЫ",
+    "📚 МАНУАЛЫ": "МАНУАЛЫ",
+    "✍️ ПОДПИСИ": "ПОДПИСИ",
+    "📲 СИМКИ": "СИМКИ",
+    "🛠 УСЛУГИ": "УСЛУГИ",
+    "🔵 ВК АККАУНТЫ": "АККАУНТЫ ВК",
+    "✈️ ТГ АККАУНТЫ": "АККАУНТЫ ТГ",
+    "🟣 ВБ АККАУНТЫ": "АККАУНТЫ ВБ",
+    "🔵 ОЗОН": "ОЗОН"
+}
 
 # --- КЛАВИАТУРЫ ---
-def main_menu_kb():
+def get_main_menu(user_id):
+    buttons = [
+        [KeyboardButton(text="🛒 Каталог товаров")],
+        [KeyboardButton(text="ℹ️ Информация"), KeyboardButton(text="🆘 Поддержка")]
+    ]
+    if user_id in ADMIN_IDS:
+        buttons.append([KeyboardButton(text="⚙️ Админ-панель")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+def catalog_inline():
     kb = []
-    for cat in CATEGORIES:
-        kb.append([InlineKeyboardButton(text=cat, callback_data=f"cat_{cat}")])
+    for display_name, callback_data in CATEGORIES.items():
+        kb.append([InlineKeyboardButton(text=display_name, callback_data=f"cat_{callback_data}")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-def admin_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_add")]
-    ])
+# --- ОБРАБОТКА КОМАНД ---
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    welcome_text = (
+        f"👋 **Привет, {message.from_user.first_name}!**\n\n"
+        f"Добро пожаловать в **{SHOP_NAME}**\n"
+        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        "Лучший сервис цифровых товаров к вашим услугам.\n\n"
+        "👇 Используйте меню для выбора:"
+    )
+    await message.answer(welcome_text, parse_mode="Markdown", reply_markup=get_main_menu(message.from_user.id))
 
-# --- ХЭНДЛЕРЫ АДМИНКИ ---
-@dp.message(Command("admin"))
-async def cmd_admin(message: Message):
+@dp.message(F.text == "🛒 Каталог товаров")
+async def show_catalog_root(message: Message):
+    await message.answer(f"📁 **{SHOP_NAME} | КАТЕГОРИИ:**", reply_markup=catalog_inline(), parse_mode="Markdown")
+
+# --- АДМИН-ПАНЕЛЬ ---
+@dp.message(F.text == "⚙️ Админ-панель")
+async def admin_menu(message: Message):
     if message.from_user.id in ADMIN_IDS:
-        await message.answer("🛠 Панель администратора:", reply_markup=admin_kb())
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_add")],
+            [InlineKeyboardButton(text="🗑 Удалить товар", callback_data="admin_delete_list")]
+        ])
+        await message.answer(f"🛠 **УПРАВЛЕНИЕ {SHOP_NAME}**", reply_markup=kb, parse_mode="Markdown")
 
-@dp.callback_query(F.data == "admin_add")
-async def start_add_product(callback: CallbackQuery, state: FSMContext):
+@dp.callback_query(F.data == "admin_delete_list")
+async def admin_delete_list(callback: CallbackQuery):
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT id, name, category FROM products"); prods = cur.fetchall(); conn.close()
+    if not prods:
+        await callback.answer("Список товаров пуст", show_alert=True); return
+    
     kb = []
-    for cat in CATEGORIES:
-        kb.append([InlineKeyboardButton(text=cat, callback_data=f"setcat_{cat}")])
-    await callback.message.edit_text("Выберите категорию для нового товара:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    for p in prods:
+        kb.append([InlineKeyboardButton(text=f"❌ {p[2]} | {p[1]}", callback_data=f"del_{p[0]}")])
+    kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_admin")])
+    await callback.message.edit_text("🗑 **Выберите товар для удаления:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query(F.data.startswith("del_"))
+async def delete_product(callback: CallbackQuery):
+    p_id = callback.data.split("_")[1]
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("DELETE FROM products WHERE id=?", (p_id,)); conn.commit(); conn.close()
+    await callback.answer("✅ Товар удален", show_alert=True)
+    await admin_delete_list(callback)
+
+@dp.callback_query(F.data == "back_to_admin")
+async def back_to_admin(callback: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_add")],
+        [InlineKeyboardButton(text="🗑 Удалить товар", callback_data="admin_delete_list")]
+    ])
+    await callback.message.edit_text(f"🛠 **УПРАВЛЕНИЕ {SHOP_NAME}**", reply_markup=kb, parse_mode="Markdown")
+
+# --- ЛОГИКА ДОБАВЛЕНИЯ (FSM) ---
+@dp.callback_query(F.data == "admin_add")
+async def start_add(callback: CallbackQuery, state: FSMContext):
+    kb = [[InlineKeyboardButton(text=c, callback_data=f"setcat_{c}")] for c in CATEGORIES.values()]
+    await callback.message.edit_text("📌 **Выберите категорию:**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
     await state.set_state(AddProduct.category)
 
 @dp.callback_query(StateFilter(AddProduct.category), F.data.startswith("setcat_"))
 async def set_category(callback: CallbackQuery, state: FSMContext):
     cat = callback.data.split("_")[1]
     await state.update_data(category=cat)
-    await callback.message.answer(f"Категория: {cat}. Теперь введите НАЗВАНИЕ товара:")
+    await callback.message.answer(f"✅ Категория: {cat}\n\n📝 Введите **Название** товара:")
     await state.set_state(AddProduct.name)
 
 @dp.message(StateFilter(AddProduct.name))
 async def set_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await message.answer("Введите ОПИСАНИЕ товара:")
+    await message.answer("📝 Введите **Описание**:")
     await state.set_state(AddProduct.description)
 
 @dp.message(StateFilter(AddProduct.description))
 async def set_desc(message: Message, state: FSMContext):
     await state.update_data(description=message.text)
-    await message.answer("Введите цену в ЗВЕЗДАХ (целое число):")
+    await message.answer("💰 Цена в **Звездах**:")
     await state.set_state(AddProduct.price_stars)
 
 @dp.message(StateFilter(AddProduct.price_stars))
 async def set_stars(message: Message, state: FSMContext):
-    await state.update_data(price_stars=int(message.text))
-    await message.answer("Введите цену в USD для CryptoBot (например 1.5):")
-    await state.set_state(AddProduct.price_usd)
+    try:
+        await state.update_data(price_stars=int(message.text))
+        await message.answer("💵 Цена в **USD** (через точку, напр. 2.5):")
+        await state.set_state(AddProduct.price_usd)
+    except: await message.answer("Введите целое число!")
 
 @dp.message(StateFilter(AddProduct.price_usd))
-async def save_product(message: Message, state: FSMContext):
-    data = await state.get_data()
-    price_usd = float(message.text.replace(",", "."))
-    
-    conn = sqlite3.connect("shop.db")
-    cur = conn.cursor()
-    cur.execute("INSERT INTO products (category, name, description, price_stars, price_usd) VALUES (?, ?, ?, ?, ?)",
-                (data['category'], data['name'], data['description'], data['price_stars'], price_usd))
-    conn.commit()
-    conn.close()
-    
-    await message.answer("✅ Товар успешно добавлен в каталог!")
-    await state.clear()
+async def finish_add(message: Message, state: FSMContext):
+    try:
+        data = await state.get_data()
+        usd = float(message.text.replace(",", "."))
+        conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+        cur.execute("INSERT INTO products (category, name, description, price_stars, price_usd) VALUES (?, ?, ?, ?, ?)",
+                    (data['category'], data['name'], data['description'], data['price_stars'], usd))
+        conn.commit(); conn.close()
+        await message.answer(f"🌟 **Товар добавлен в {SHOP_NAME}!**", parse_mode="Markdown")
+        await state.clear()
+    except: await message.answer("Введите число!")
 
-# --- ХЭНДЛЕРЫ ПОКУПАТЕЛЯ ---
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer("🔥 Добро пожаловать в TRC Shop! Выберите категорию:", reply_markup=main_menu_kb())
-
+# --- ПОКАЗ ТОВАРОВ ---
 @dp.callback_query(F.data.startswith("cat_"))
-async def show_products(callback: CallbackQuery):
-    category = callback.data.split("_")[1]
-    conn = sqlite3.connect("shop.db")
-    cur = conn.cursor()
-    cur.execute("SELECT id, name FROM products WHERE category=?", (category,))
-    products = cur.fetchall()
-    conn.close()
+async def list_products(callback: CallbackQuery):
+    cat = callback.data.split("_")[1]
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT id, name FROM products WHERE category=?", (cat,))
+    prods = cur.fetchall(); conn.close()
     
-    if not products:
-        await callback.answer("В этой категории пока нет товаров.", show_alert=True)
-        return
+    if not prods:
+        await callback.answer("⚠️ В этой категории пусто", show_alert=True); return
 
-    kb = []
-    for p_id, p_name in products:
-        kb.append([InlineKeyboardButton(text=p_name, callback_data=f"view_{p_id}")])
-    kb.append([InlineKeyboardButton(text="◀️ Назад", callback_data="to_main")])
-    
-    await callback.message.edit_text(f"🛒 Товары в категории {category}:", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-
-@dp.callback_query(F.data == "to_main")
-async def to_main(callback: CallbackQuery):
-    await callback.message.edit_text("Выберите категорию:", reply_markup=main_menu_kb())
+    kb = [[InlineKeyboardButton(text=f"🔹 {p[1]}", callback_data=f"view_{p[0]}")] for p in prods]
+    kb.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="to_main")])
+    await callback.message.edit_text(f"📦 **{SHOP_NAME} | {cat}**", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="Markdown")
 
 @dp.callback_query(F.data.startswith("view_"))
-async def view_product(callback: CallbackQuery):
+async def view_item(callback: CallbackQuery):
     p_id = callback.data.split("_")[1]
-    conn = sqlite3.connect("shop.db")
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM products WHERE id=?", (p_id,))
-    p = cur.fetchone()
-    conn.close()
+    conn = sqlite3.connect("shop.db"); cur = conn.cursor()
+    cur.execute("SELECT * FROM products WHERE id=?", (p_id,)); p = cur.fetchone(); conn.close()
     
-    text = f"📦 **{p[2]}**\n\n{p[3]}\n\nЦена: ⭐️ {p[4]} | 💵 ${p[5]}"
+    text = (
+        f"💎 **{p[2]}**\n"
+        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        f"{p[3]}\n"
+        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        f"💵 Стоимость: **${p[5]}** или **⭐️ {p[4]}**"
+    )
     kb = [
-        [InlineKeyboardButton(text="⭐️ Купить за Звезды", callback_data=f"buy_stars_{p[0]}")],
-        [InlineKeyboardButton(text="🪙 Купить CryptoBot", callback_data=f"buy_crypto_{p[0]}")],
-        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"cat_{p[1]}")]
+        [InlineKeyboardButton(text="💳 Оплатить Звездами", callback_data=f"stars_pay_{p[0]}")],
+        [InlineKeyboardButton(text="🪙 CryptoBot (USDT)", callback_data=f"crypto_pay_{p[0]}")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data=f"cat_{p[1]}")]
     ]
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
-# --- ПЛАТЕЖИ (Звезды) ---
-@dp.callback_query(F.data.startswith("buy_stars_"))
-async def buy_stars(callback: CallbackQuery):
-    p_id = callback.data.split("_")[2]
-    conn = sqlite3.connect("shop.db")
-    cur = conn.cursor()
-    cur.execute("SELECT name, description, price_stars FROM products WHERE id=?", (p_id,))
-    p = cur.fetchone()
-    conn.close()
-
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title=p[0],
-        description=p[1],
-        payload=f"stars_{p_id}",
-        provider_token="",
-        currency="XTR",
-        prices=[LabeledPrice(label=p[0], amount=p[2])]
-    )
-
-@dp.pre_checkout_query()
-async def pre_checkout(query: PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(query.id, ok=True)
-
-@dp.message(F.successful_payment)
-async def success_pay(message: Message):
-    await message.answer("✅ Оплата прошла успешно! Администраторы свяжутся с вами или выдадут товар.")
-    for admin in ADMIN_IDS:
-        await bot.send_message(admin, f"💰 НОВАЯ ПОКУПКА!\nПользователь: @{message.from_user.username}\nСумма: {message.successful_payment.total_amount} звезд")
+@dp.callback_query(F.data == "to_main")
+async def go_back(callback: CallbackQuery):
+    await callback.message.edit_text(f"📁 **{SHOP_NAME} | КАТЕГОРИИ:**", reply_markup=catalog_inline(), parse_mode="Markdown")
 
 # --- ЗАПУСК ---
 async def main():
     init_db()
-    print("Бот TRCproject запущен!")
+    print(f"{SHOP_NAME} работает!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
