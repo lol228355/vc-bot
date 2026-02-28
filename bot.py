@@ -9,7 +9,7 @@ from aiogram.types import Message, LabeledPrice, PreCheckoutQuery, InlineKeyboar
 from aiocryptopay import AioCryptoPay, Networks
 
 # --- КОНФИГУРАЦИЯ ---
-BOT_TOKEN = "8530587228:AAFLCfG3W9GVInOtA8nqZG-o3f9StyGc9wI"
+BOT_TOKEN = "8530587228:AAHZyvz5zs1MwipU7lMJiLDc20zGNVZCkAw"
 CRYPTO_BOT_TOKEN = "ВСТАВЬ_ТОКЕН_ИЗ_CRYPTO_BOT" 
 ADMIN_IDS = [8663017094, 8119723042]
 SHOP_NAME = "𝗠𝗢𝗜 𝗦𝗵𝗢𝗣"
