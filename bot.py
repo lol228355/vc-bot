@@ -5,7 +5,7 @@ from telebot import types
 
 # ================= НАСТРОЙКИ =================
 API_KEY_VING = 'cdlFcWjrPF7pOwJeXjhELoGYGxsVCZTrvlS396wH8QXg2XlRquw9Z7NCyi5W'
-BOT_TOKEN = '8799904851:AAF8AfaiFdvjK1fqf3BdCb0GG7JwyEVODtg'
+BOT_TOKEN = '8799904851:AAHGj1tmeeseDyavBtAw8_TREsB4UxapanQ'
 CRYPTO_TOKEN = '540404:AA2Rex1G8gtM1zNSPWa3pADmtHbWx4B2bI8'
 API_URL_VING = 'https://vingboost.ru/api/v2'
 
