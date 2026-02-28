@@ -25,210 +25,197 @@ def db_query(sql, params=(), fetch=False):
         conn.commit()
 
 def init_db():
-    # Таблица юзеров
     db_query('''CREATE TABLE IF NOT EXISTS users 
                 (id INTEGER PRIMARY KEY, balance REAL DEFAULT 0, is_banned INTEGER DEFAULT 0)''')
-    # Таблица услуг
-    db_query('CREATE TABLE IF NOT EXISTS my_services (s_id INTEGER PRIMARY KEY, name TEXT, my_price REAL)')
-    # Таблица заказов
+    db_query('''CREATE TABLE IF NOT EXISTS my_services 
+                (s_id INTEGER PRIMARY KEY, name TEXT, my_price REAL, category TEXT)''')
     db_query('''CREATE TABLE IF NOT EXISTS orders 
                 (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, order_id_site TEXT, service_name TEXT, qty INTEGER, cost REAL)''')
+    db_query('''CREATE TABLE IF NOT EXISTS promos 
+                (code TEXT PRIMARY KEY, amount REAL)''')
 
 def is_user_banned(user_id):
     res = db_query("SELECT is_banned FROM users WHERE id=?", (user_id,), True)
     return res[0][0] == 1 if res else False
 
-# --- ГЛАВНОЕ МЕНЮ ---
+# --- ГЛАВНОЕ МЕНЮ (INLINE) ---
+def main_menu_markup():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("📦 Каталог", callback_data="open_catalog"),
+        types.InlineKeyboardButton("👤 Профиль", callback_data="open_profile")
+    )
+    markup.add(types.InlineKeyboardButton("📋 Мои заказы", callback_data="my_orders"))
+    return markup
+
 @bot.message_handler(commands=['start'])
 def start(message):
     init_db()
-    if is_user_banned(message.chat.id):
-        bot.send_message(message.chat.id, "❌ **Доступ ограничен.** Вы заблокированы.", parse_mode="Markdown")
-        return
-
+    if is_user_banned(message.chat.id): return
+    
     if not db_query("SELECT id FROM users WHERE id=?", (message.chat.id,), True):
         db_query("INSERT INTO users (id, balance, is_banned) VALUES (?, 0, 0)", (message.chat.id,))
     
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    # Кнопки сверху
-    markup.row("📦 Каталог", "👤 Профиль")
-    markup.row("📋 Мои заказы")
-    
     welcome = (
-        "💎 **Добро пожаловать в SMM Store!**\n"
-        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        "Лучшие цены на накрутку здесь. Выберите раздел меню ниже."
+        "✨ **SMM PREMIUM STORE** ✨\n"
+        "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        "🚀 Быстрая накрутка всех соцсетей в одном месте!\n"
+        "Выберите нужное действие ниже:"
     )
-    if message.from_user.id in ADMIN_IDS:
-        welcome += "\n\n🛠 **Админ-команды:** `/add`, `/del`, `/ban`, `/unban`, `/give`, `/take`, `/broadcast`, `/stats`"
+    bot.send_message(message.chat.id, welcome, reply_markup=main_menu_markup(), parse_mode="Markdown")
+
+# --- ОБРАБОТКА ВСЕХ НАЖАТИЙ КНОПОК ---
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    if is_user_banned(call.message.chat.id): return
+
+    # Главное меню
+    if call.data == "to_main":
+        bot.edit_message_text("🚀 Выберите нужное действие ниже:", call.message.chat.id, call.message.message_id, reply_markup=main_menu_markup())
+
+    # Профиль
+    elif call.data == "open_profile":
+        res = db_query("SELECT balance FROM users WHERE id=?", (call.message.chat.id,), True)
+        bal = res[0][0] if res else 0
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💳 Пополнить", callback_data="start_deposit"),
+                   types.InlineKeyboardButton("🎁 Промокод", callback_data="activate_promo"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="to_main"))
         
-    bot.send_message(message.chat.id, welcome, reply_markup=markup, parse_mode="Markdown")
+        text = f"👤 **ЛИЧНЫЙ КАБИНЕТ**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n🆔 ID: `{call.message.chat.id}`\n💰 Баланс: `{round(bal, 2)}` **RUB**"
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-# --- МОИ ЗАКАЗЫ ---
-@bot.message_handler(func=lambda m: m.text == "📋 Мои заказы")
-def my_orders(message):
-    if is_user_banned(message.chat.id): return
-    orders = db_query("SELECT order_id_site, service_name, qty, cost FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (message.chat.id,), True)
-    
-    if not orders:
-        bot.send_message(message.chat.id, "🛒 **У вас пока нет заказов.**\nСамое время что-нибудь заказать!", parse_mode="Markdown")
-        return
-    
-    msg = "📋 **Ваши последние 10 заказов:**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-    for o in orders:
-        msg += f"🔹 **ID:** `{o[0]}` | {o[1]}\n┗ Кол-во: {o[2]} шт. | Цена: {round(o[3], 2)} руб.\n\n"
-    
-    bot.send_message(message.chat.id, msg, parse_mode="Markdown")
+    # Каталог (Категории)
+    elif call.data == "open_catalog":
+        cats = db_query("SELECT DISTINCT category FROM my_services", fetch=True)
+        if not cats:
+            bot.answer_callback_query(call.id, "Каталог пока пуст!", show_alert=True)
+            return
+        markup = types.InlineKeyboardMarkup()
+        for c in cats:
+            markup.add(types.InlineKeyboardButton(f"📁 {c[0]}", callback_data=f"cat_{c[0]}"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="to_main"))
+        bot.edit_message_text("📂 **Выберите категорию:**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-# --- ПРОФИЛЬ ---
-@bot.message_handler(func=lambda m: m.text == "👤 Профиль")
-def profile(message):
-    if is_user_banned(message.chat.id): return
-    res = db_query("SELECT balance FROM users WHERE id=?", (message.chat.id,), True)
-    bal = res[0][0] if res else 0
-    
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("➕ Пополнить баланс", callback_data="start_deposit"))
-    
-    text = (
-        f"👤 **Ваш личный кабинет**\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        f"🆔 ID: `{message.chat.id}`\n"
-        f"💰 Баланс: `{round(bal, 2)}` **руб.**\n"
-    )
-    bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
+    # Услуги в категории
+    elif call.data.startswith("cat_"):
+        cat_name = call.data[4:]
+        services = db_query("SELECT s_id, name, my_price FROM my_services WHERE category=?", (cat_name,), True)
+        markup = types.InlineKeyboardMarkup()
+        for s in services:
+            markup.add(types.InlineKeyboardButton(f"{s[1]} | {s[2]}₽", callback_data=f"buy_{s[0]}_{s[2]}"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад в категории", callback_data="open_catalog"))
+        bot.edit_message_text(f"📍 **Услуги: {cat_name}**", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-# --- АДМИН-ЛОГИКА ---
-@bot.message_handler(commands=['stats'])
-def admin_stats(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    u_cnt = db_query("SELECT COUNT(*) FROM users", fetch=True)[0][0]
-    o_cnt = db_query("SELECT COUNT(*) FROM orders", fetch=True)[0][0]
-    bot.send_message(message.chat.id, f"📊 **Статистика:**\nЮзеров: {u_cnt}\nВсего заказов: {o_cnt}")
+    # Мои заказы
+    elif call.data == "my_orders":
+        orders = db_query("SELECT order_id_site, service_name, qty, cost FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 5", (call.message.chat.id,), True)
+        msg = "📋 **ПОСЛЕДНИЕ ЗАКАЗЫ:**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n" if orders else "🛒 Заказов еще нет."
+        for o in orders:
+            msg += f"🆔 `{o[0]}` | {o[1]}\n┗ {o[2]} шт. | {round(o[3],2)} RUB\n\n"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="to_main"))
+        bot.edit_message_text(msg, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-@bot.message_handler(commands=['add'])
-def admin_add(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    try:
-        _, s_id, price = message.text.split()
-        all_s = requests.post(API_URL_VING, data={'key': API_KEY_VING, 'action': 'services'}).json()
-        info = next((s for s in all_s if str(s['service']) == s_id), None)
-        if info:
-            db_query("INSERT OR REPLACE INTO my_services (s_id, name, my_price) VALUES (?, ?, ?)", (s_id, info['name'], float(price)))
-            bot.send_message(message.chat.id, f"✅ Добавлено: **{info['name']}** за {price}р")
-    except: bot.send_message(message.chat.id, "Формат: `/add ID цена`")
+    # Пополнение
+    elif call.data == "start_deposit":
+        msg = bot.send_message(call.message.chat.id, "💰 Введите сумму пополнения (в рублях):")
+        bot.register_next_step_handler(msg, process_deposit)
 
-@bot.message_handler(commands=['broadcast'])
-def admin_broadcast(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    text = message.text.replace('/broadcast ', '')
-    users = db_query("SELECT id FROM users", fetch=True)
-    for u in users:
-        try: bot.send_message(u[0], f"📢 **Внимание!**\n\n{text}", parse_mode="Markdown")
-        except: continue
-    bot.send_message(message.chat.id, "✅ Рассылка завершена.")
+    # Активация промокода
+    elif call.data == "activate_promo":
+        msg = bot.send_message(call.message.chat.id, "🎁 Введите промокод:")
+        bot.register_next_step_handler(msg, process_promo)
 
-@bot.message_handler(commands=['give'])
-def admin_give(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    try:
-        _, u_id, amt = message.text.split()
-        db_query("UPDATE users SET balance = balance + ? WHERE id = ?", (float(amt), u_id))
-        bot.send_message(message.chat.id, f"✅ Выдали {amt} руб юзеру {u_id}")
-    except: pass
-
-@bot.message_handler(commands=['ban'])
-def admin_ban(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    u_id = message.text.split()[1]
-    db_query("UPDATE users SET is_banned = 1 WHERE id = ?", (u_id,))
-    bot.send_message(message.chat.id, f"🚫 Забанен: {u_id}")
-
-# --- ПОПОЛНЕНИЕ (CALLBACK) ---
-@bot.callback_query_handler(func=lambda call: call.data == "start_deposit")
-def deposit_step1(call):
-    if is_user_banned(call.message.chat.id): return
-    msg = bot.send_message(call.message.chat.id, "💰 Введите сумму в **рублях** для пополнения:", parse_mode="Markdown")
-    bot.register_next_step_handler(msg, dep_pay)
-
-def dep_pay(message):
-    try:
-        rub = float(message.text)
-        usdt = round(rub / USDT_COURSE, 2)
-        if usdt < 0.01: usdt = 0.01
+    # Проверка оплаты
+    elif call.data.startswith("chk_"):
+        _, inv_id, rub = call.data.split('_')
         headers = {'Crypto-Pay-API-Token': CRYPTO_TOKEN}
-        payload = {'asset': 'USDT', 'amount': usdt, 'description': f'Пополнение баланса'}
-        res = requests.post('https://pay.crypt.bot/api/createInvoice', headers=headers, json=payload).json()
-        if res['ok']:
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("💳 Перейти к оплате", url=res['result']['pay_url']))
-            markup.add(types.InlineKeyboardButton("✅ Проверить оплату", callback_data=f"chk_{res['result']['invoice_id']}_{rub}"))
-            bot.send_message(message.chat.id, f"💵 К оплате: `{usdt}` **USDT** (~{rub} руб.)", reply_markup=markup, parse_mode="Markdown")
-    except: bot.send_message(message.chat.id, "⚠️ Введите число.")
+        res = requests.get('https://pay.crypt.bot/api/getInvoices', headers=headers, params={'invoice_ids': inv_id}).json()
+        if res['ok'] and res['result']['items'][0]['status'] == 'paid':
+            db_query("UPDATE users SET balance = balance + ? WHERE id = ?", (float(rub), call.message.chat.id))
+            bot.send_message(call.message.chat.id, f"✅ Баланс пополнен на {rub} RUB!")
+        else:
+            bot.answer_callback_query(call.id, "Оплата не найдена.", show_alert=True)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('chk_'))
-def chk_pay(call):
-    _, inv_id, rub = call.data.split('_')
-    headers = {'Crypto-Pay-API-Token': CRYPTO_TOKEN}
-    res = requests.get('https://pay.crypt.bot/api/getInvoices', headers=headers, params={'invoice_ids': inv_id}).json()
-    if res['ok'] and res['result']['items'][0]['status'] == 'paid':
-        db_query("UPDATE users SET balance = balance + ? WHERE id = ?", (float(rub), call.message.chat.id))
-        bot.edit_message_text(f"💳 **Баланс пополнен на {rub} руб.!**", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
-    else: bot.answer_callback_query(call.id, "Оплата не найдена.", show_alert=True)
+    # Выбор услуги для покупки
+    elif call.data.startswith("buy_"):
+        _, s_id, price = call.data.split('_')
+        user_steps[call.message.chat.id] = {'s_id': s_id, 'price': float(price)}
+        bot.send_message(call.message.chat.id, "🔗 Отправьте ссылку на пост/профиль:")
+        bot.register_next_step_handler(call.message, get_order_link)
 
-# --- КАТАЛОГ И ЗАКАЗ ---
-@bot.message_handler(func=lambda m: m.text == "📦 Каталог")
-def catalog(message):
-    if is_user_banned(message.chat.id): return
-    services = db_query("SELECT s_id, name, my_price FROM my_services", fetch=True)
-    if not services:
-        bot.send_message(message.chat.id, "📂 **Каталог пуст.** Админы скоро добавят услуги.", parse_mode="Markdown")
-        return
-    markup = types.InlineKeyboardMarkup()
-    for s_id, name, price in services:
-        markup.add(types.InlineKeyboardButton(f"✨ {name} | {price}₽", callback_data=f"buy_{s_id}_{price}"))
-    bot.send_message(message.chat.id, "⬇️ **Выберите интересующую услугу:**", reply_markup=markup, parse_mode="Markdown")
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
-def buy_start(call):
-    if is_user_banned(call.message.chat.id): return
-    _, s_id, price = call.data.split('_')
-    user_steps[call.message.chat.id] = {'s_id': s_id, 'price': float(price)}
-    bot.send_message(call.message.chat.id, "🔗 **Отправьте ссылку на профиль/пост:**", parse_mode="Markdown")
-    bot.register_next_step_handler(call.message, get_q)
-
-def get_q(message):
+# --- ЛОГИКА ЗАКАЗА ---
+def get_order_link(message):
     user_steps[message.chat.id]['link'] = message.text
-    bot.send_message(message.chat.id, "🔢 **Введите количество (цифрами):**", parse_mode="Markdown")
-    bot.register_next_step_handler(message, finalize)
+    bot.send_message(message.chat.id, "🔢 Введите количество:")
+    bot.register_next_step_handler(message, finalize_order)
 
-def finalize(message):
+def finalize_order(message):
     try:
         qty = int(message.text)
         data = user_steps[message.chat.id]
         cost = (data['price'] / 1000) * qty
         bal = db_query("SELECT balance FROM users WHERE id=?", (message.chat.id,), True)[0][0]
-        
         if bal < cost:
-            bot.send_message(message.chat.id, f"❌ **Недостаточно средств.**\nНужно: `{round(cost, 2)}` руб.\nВаш баланс: `{round(bal, 2)}` руб.", parse_mode="Markdown")
+            bot.send_message(message.chat.id, f"❌ Недостаточно средств! Нужно {round(cost,2)} RUB")
             return
-            
         res = requests.post(API_URL_VING, data={'key': API_KEY_VING, 'action': 'add', 'service': data['s_id'], 'link': data['link'], 'quantity': qty}).json()
-        
         if 'order' in res:
-            # Списываем баланс
             db_query("UPDATE users SET balance = balance - ? WHERE id = ?", (cost, message.chat.id))
-            # Сохраняем в историю заказов
             db_query("INSERT INTO orders (user_id, order_id_site, service_name, qty, cost) VALUES (?, ?, ?, ?, ?)", 
                      (message.chat.id, res['order'], "Услуга #" + str(data['s_id']), qty, cost))
-            
-            bot.send_message(message.chat.id, f"✅ **Заказ успешно создан!**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n🆔 ID заказа: `{res['order']}`\n💰 Списано: `{round(cost, 2)}` руб.", parse_mode="Markdown")
-        else:
-            bot.send_message(message.chat.id, f"❌ **Ошибка API сайта:** {res.get('error')}", parse_mode="Markdown")
-    except:
-        bot.send_message(message.chat.id, "⚠️ **Ошибка.** Пожалуйста, введите корректное число.")
+            bot.send_message(message.chat.id, f"✅ Заказ №{res['order']} создан!")
+        else: bot.send_message(message.chat.id, f"Ошибка API: {res.get('error')}")
+    except: bot.send_message(message.chat.id, "⚠️ Ошибка. Введите число.")
+
+# --- ПОПОЛНЕНИЕ И ПРОМО ---
+def process_deposit(message):
+    try:
+        rub = float(message.text)
+        usdt = round(rub / USDT_COURSE, 2)
+        headers = {'Crypto-Pay-API-Token': CRYPTO_TOKEN}
+        res = requests.post('https://pay.crypt.bot/api/createInvoice', headers=headers, json={'asset': 'USDT', 'amount': usdt}).json()
+        if res['ok']:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("💳 Оплатить", url=res['result']['pay_url']))
+            markup.add(types.InlineKeyboardButton("✅ Проверить", callback_data=f"chk_{res['result']['invoice_id']}_{rub}"))
+            bot.send_message(message.chat.id, f"К оплате: {usdt} USDT (~{rub} RUB)", reply_markup=markup)
+    except: bot.send_message(message.chat.id, "Ошибка ввода.")
+
+def process_promo(message):
+    code = message.text
+    res = db_query("SELECT amount FROM promos WHERE code=?", (code,), True)
+    if res:
+        amt = res[0][0]
+        db_query("UPDATE users SET balance = balance + ? WHERE id = ?", (amt, message.chat.id))
+        db_query("DELETE FROM promos WHERE code=?", (code,))
+        bot.send_message(message.chat.id, f"🎁 Промокод активирован! Зачислено {amt} RUB.")
+    else:
+        bot.send_message(message.chat.id, "❌ Промокод неверный или уже использован.")
+
+# --- АДМИН КОМАНДЫ ---
+@bot.message_handler(commands=['add'])
+def admin_add(message):
+    if message.from_user.id not in ADMIN_IDS: return
+    try:
+        _, s_id, price, cat = message.text.split()
+        all_s = requests.post(API_URL_VING, data={'key': API_KEY_VING, 'action': 'services'}).json()
+        info = next((s for s in all_s if str(s['service']) == s_id), None)
+        if info:
+            db_query("INSERT OR REPLACE INTO my_services (s_id, name, my_price, category) VALUES (?, ?, ?, ?)", (s_id, info['name'], float(price), cat))
+            bot.send_message(message.chat.id, f"✅ {info['name']} добавлен в категорию {cat}")
+    except: bot.send_message(message.chat.id, "Формат: `/add [ID] [Цена] [Категория]`")
+
+@bot.message_handler(commands=['promo'])
+def admin_promo(message):
+    if message.from_user.id not in ADMIN_IDS: return
+    try:
+        _, code, amt = message.text.split()
+        db_query("INSERT INTO promos (code, amount) VALUES (?, ?)", (code, float(amt)))
+        bot.send_message(message.chat.id, f"🎫 Промокод `{code}` на {amt} RUB создан!", parse_mode="Markdown")
+    except: bot.send_message(message.chat.id, "Формат: `/promo [Код] [Сумма]`")
 
 if __name__ == '__main__':
     init_db()
-    print("Бот успешно запущен и оформлен!")
     bot.infinity_polling()
