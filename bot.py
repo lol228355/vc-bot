@@ -9,7 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiocryptopay import CryptoPay
 
 # --- КОНФИГ ---
-BOT_TOKEN = "8675832127:AAEKUIKC_YY_-nLGLywg-Vwzt8dQnx2hClQ"
+BOT_TOKEN = "8675832127:AAHin9yM2xzbjclF3UqDz2k_zsoLKsiiZXY"
 CRYPTO_TOKEN = "540404:AA2Rex1G8gtM1zNSPWa3pADmtHbWx4B2bI8"
 ADMIN_IDS = [8663017094, 8119723042]
 
