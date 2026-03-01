@@ -6,7 +6,8 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiocryptopay import CryptoPay
+# ИСПРАВЛЕНО: Импортируем AioCryptoPay вместо CryptoPay
+from aiocryptopay import AioCryptoPay
 
 # --- КОНФИГ ---
 BOT_TOKEN = "8675832127:AAHin9yM2xzbjclF3UqDz2k_zsoLKsiiZXY"
@@ -15,7 +16,8 @@ ADMIN_IDS = [8663017094, 8119723042]
 
 # Инициализация
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-crypto = CryptoPay(token=CRYPTO_TOKEN, network='mainnet')
+# ИСПРАВЛЕНО: Используем корректное имя класса
+crypto = AioCryptoPay(token=CRYPTO_TOKEN, network='mainnet')
 dp = Dispatcher()
 
 # Состояния для админки
@@ -44,7 +46,6 @@ admin_kb = InlineKeyboardMarkup(inline_keyboard=[
 
 @dp.message(F.text == "/start")
 async def cmd_start(message: Message):
-    # Твои премиум-эмодзи (HTML коды)
     text = (
         f'<tg-emoji emoji-id="6082458574934514586">🐸</tg-emoji> <b>Добро пожаловать!</b>\n\n'
         f'<tg-emoji emoji-id="6082458574934514586">🐸</tg-emoji> <b>В чем же наш бот лучше других?</b>\n\n'
@@ -92,7 +93,6 @@ async def add_price(message: Message, state: FSMContext):
     data = await state.get_data()
     price = message.text
     
-    # Итог добавления
     summary = (
         f"✅ <b>Товар успешно создан!</b>\n\n"
         f"📦 Название: {data['name']}\n"
@@ -106,7 +106,6 @@ async def add_price(message: Message, state: FSMContext):
 
 @dp.message(F.text == "💳 Пополнить")
 async def refill_balance(message: Message):
-    # Пример создания инвойса на 5 USDT (можно сделать ввод суммы пользователем)
     invoice = await crypto.create_invoice(asset='USDT', amount=5.0)
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -129,7 +128,11 @@ async def close_admin(callback: CallbackQuery):
 async def main():
     print("Бот запущен и готов к работе!")
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        # Важно закрывать сессию крипто-кошелька при выключении
+        await crypto.close()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
